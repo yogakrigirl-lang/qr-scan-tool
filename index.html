@@ -1,0 +1,2847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR scan effect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0b;
+  --panel: #111113;
+  --raise: #1a1a1d;
+  --raise2: #232327;
+  --line: #1f1f23;
+  --line2: #2c2c31;
+  --text: #f0efed;
+  --mute: #8a8890;
+  --accent: #ff8aa5;
+  --accent-dim: #f27795;
+  --warn: #f0b36a;
+  --danger: #ff7b7b;
+  --ease: cubic-bezier(.32, .72, 0, 1);
+  --font: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.45; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---------- shell ---------- */
+.bar { height: 52px; display: flex; align-items: center; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+.fileinfo { color: var(--mute); font-size: 12.5px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note { color: var(--mute); font-size: 12.5px; white-space: nowrap; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; height: calc(100vh - 52px); }
+.work { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 14px 16px 14px 20px; }
+.side { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.side-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 16px 20px 8px; scrollbar-width: thin; scrollbar-color: #2c2c31 transparent; }
+
+/* ---------- buttons, switch, range ---------- */
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.tgroup { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn { background: var(--raise); border: 0; border-radius: 8px; padding: 0 12px; height: 32px; font-size: 13px; font-weight: 500; color: var(--text); transition: background .15s; }
+.btn:hover:not(:disabled) { background: var(--raise2); }
+.btn:disabled { color: #55535a; cursor: default; background: #151517; }
+.btn.primary { background: var(--accent); color: #1a0d12; font-weight: 600; height: 46px; border-radius: 12px; font-size: 15px; width: 100%; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-dim); }
+.btn.primary:disabled { background: #1d1d20; color: #5f5d64; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.zoomtxt { color: var(--mute); font-size: 12.5px; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .tr { width: 38px; height: 22px; border-radius: 11px; background: #3a3a40; position: relative; flex: none; transition: background .25s var(--ease); }
+.switch .tr::after { content: ""; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); transition: transform .28s var(--ease); }
+.switch input:checked + .tr { background: var(--accent); }
+.switch input:checked + .tr::after { transform: translateX(16px); }
+.switch input:focus-visible + .tr { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; width: 100%; min-width: 0; height: 20px; background: transparent; margin: 0; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--p, 0%), #2c2c31 var(--p, 0%)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; margin-top: -6px; box-shadow: 0 1px 4px rgba(0, 0, 0, .55); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: #2c2c31; }
+input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
+input[type=range]:disabled { opacity: .4; cursor: default; }
+
+.seg { position: relative; display: flex; background: var(--raise); border-radius: 9px; padding: 2px; --i: 0; --n: 2; }
+.seg::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / var(--n)); transform: translateX(calc(var(--i) * 100%)); background: #3b3b41; border-radius: 7px; box-shadow: 0 1px 2px rgba(0, 0, 0, .45); transition: transform .3s var(--ease); }
+.seg button { position: relative; z-index: 1; flex: 1; min-width: 0; background: none; border: 0; border-radius: 7px; padding: 6px 4px; font-size: 13px; font-weight: 500; color: var(--mute); white-space: nowrap; transition: color .2s; }
+.seg button:hover:not(:disabled) { color: var(--text); }
+.seg button[aria-checked=true] { color: #fff; }
+.seg button:disabled { color: #4a484f; cursor: default; }
+
+/* ---------- stage ---------- */
+.stage { position: relative; flex: 1; min-height: 0; background: #060607; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.stage canvas.main { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: none; }
+.stage.has-img canvas.main { display: block; }
+.drop { position: absolute; inset: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; color: var(--mute); border: 1px dashed var(--line2); border-radius: 10px; padding: 24px; transition: border-color .2s, color .2s; }
+.stage.has-img .drop { display: none; }
+.stage.dragover .drop { border-color: var(--accent); color: var(--text); }
+.drop svg { margin-bottom: 10px; }
+.drop strong { color: var(--text); font-weight: 500; font-size: 17px; letter-spacing: -.01em; }
+.drop .btn { margin-top: 14px; }
+#loupe { position: absolute; top: 14px; width: 132px; height: 132px; border: 1px solid #3a3a40; border-radius: 12px; background: #000; pointer-events: none; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+.status { margin: 10px 0 0; min-height: 20px; font-size: 13px; color: var(--mute); }
+.status.ok { color: var(--text); }
+.status.warn { color: var(--warn); }
+
+/* ---------- side panel ---------- */
+.prev-wrap { position: relative; display: flex; justify-content: center; background: #060607; border: 1px solid var(--line); border-radius: 14px; padding: 14px 0; margin-top: 14px; }
+.prev-wrap canvas { height: min(44vh, 500px); aspect-ratio: 9 / 16; max-width: 100%; display: block; background: #000; border-radius: 10px; }
+.prev-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--mute); text-align: center; padding: 24px; font-size: 13px; }
+.prev-wrap.ready .prev-empty { display: none; }
+.prev-wrap:not(.ready) canvas { visibility: hidden; }
+.player { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.player .btn { min-width: 64px; }
+.phases { position: relative; height: 16px; margin: 0 0 0 76px; color: var(--mute); font-size: 11px; }
+.phases span { position: absolute; white-space: nowrap; }
+.result { margin-top: 14px; }
+.result video { width: 100%; max-height: 60vh; background: #000; display: block; border-radius: 14px; }
+.result .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.result .row span { color: var(--mute); font-size: 12.5px; }
+.result .btn.primary { width: auto; height: 38px; padding: 0 20px; font-size: 14px; border-radius: 10px; }
+
+.group { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 16px 14px; }
+.field { min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.lbl { display: block; font-size: 12px; color: var(--mute); margin-bottom: 7px; }
+.rangerow { display: flex; align-items: center; gap: 12px; }
+.rangerow output { width: 34px; text-align: right; color: var(--mute); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.labelrow { margin-top: 10px; }
+input[type=text] { background: var(--raise); border: 1px solid transparent; border-radius: 9px; padding: 8px 11px; width: 100%; min-width: 0; font-size: 13px; transition: border-color .15s; }
+input[type=text]:hover { border-color: var(--line2); }
+input[type=text]:focus { outline: none; border-color: var(--accent); }
+
+.make { border-top: 1px solid var(--line); padding: 14px 20px 16px; background: var(--panel); }
+.row2 { display: flex; gap: 8px; }
+.row2 .btn:not(.primary) { white-space: nowrap; height: 46px; border-radius: 12px; }
+.progress { margin-top: 12px; }
+.bar-track { height: 4px; border-radius: 2px; background: var(--raise); overflow: hidden; }
+.bar-track i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; }
+.progress span { display: block; margin-top: 7px; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.err { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+.err:empty { display: none; }
+
+@media (max-width: 1000px) {
+  .app { display: block; height: auto; }
+  .bar .note { display: none; }
+  .work { padding: 12px 14px; }
+  .stage { flex: none; height: 62vh; min-height: 340px; }
+  .side { border-left: 0; border-top: 1px solid var(--line); }
+  .side-scroll { overflow: visible; }
+  .prev-wrap canvas { height: min(60vh, 520px); }
+  .make { position: sticky; bottom: 0; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">QR scan</div>
+  <div class="fileinfo" id="fileInfo"></div>
+  <div class="note">Runs in this page. Nothing is uploaded or saved.</div>
+</header>
+
+<main class="app">
+  <section class="work">
+    <div class="toolbar">
+      <div class="tgroup">
+        <label class="switch"><input type="checkbox" id="autoFit" checked><span class="tr"></span>Auto-fit to the QR</label>
+        <button class="btn" id="fitBtn" disabled>Fit now</button>
+        <button class="btn" id="clearBtn" disabled>Clear</button>
+      </div>
+      <div class="tgroup">
+        <span class="zoomtxt" id="zoomTxt"></span>
+        <button class="btn" id="zoomBtn" disabled>Reset zoom</button>
+        <button class="btn" id="newBtn" disabled>New photo</button>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="drop">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none" stroke="#8a8890" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 18V12a8 8 0 0 1 8-8h6M34 4h6a8 8 0 0 1 8 8v6M48 34v6a8 8 0 0 1-8 8h-6M18 48h-6a8 8 0 0 1-8-8v-6"/></svg>
+        <strong>Drop a photo here</strong>
+        <span>or paste it with Ctrl+V</span>
+        <button class="btn" id="pickBtn" type="button">Choose a file</button>
+      </div>
+      <canvas class="main" id="markCv"></canvas>
+      <canvas id="loupe" width="132" height="132" hidden></canvas>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <p class="status" id="markHint">Any size or ratio works.</p>
+  </section>
+
+  <aside class="side">
+    <div class="side-scroll">
+      <div class="seg" id="tabs" role="radiogroup" aria-label="View"><button data-v="prev">Preview</button><button data-v="vid" disabled>Video</button></div>
+
+      <div id="viewPrev">
+        <div class="prev-wrap" id="prevWrap">
+          <canvas id="prevCv" width="540" height="960"></canvas>
+          <div class="prev-empty">Mark the QR and the animation shows up here.</div>
+        </div>
+        <div class="player">
+          <button class="btn" id="playBtn" disabled>Pause</button>
+          <input type="range" id="scrub" min="0" max="1000" value="0" disabled aria-label="Position">
+        </div>
+        <div class="phases" id="phases"></div>
+      </div>
+      <div id="viewVid" class="result" hidden>
+        <video id="vid" controls playsinline loop></video>
+        <div class="row"><span id="meta"></span><a class="btn primary" id="dl" download="qr-scan.mp4">Download</a></div>
+      </div>
+
+      <div class="group">
+        <div class="field"><span class="lbl">Frame rate</span>
+          <div class="seg" id="fps" role="radiogroup" aria-label="Frame rate"><button data-v="30">30</button><button data-v="60">60</button></div></div>
+        <div class="field"><span class="lbl">Speed</span>
+          <div class="seg" id="speed" role="radiogroup" aria-label="Speed"><button data-v="0.8">Slow</button><button data-v="1">Normal</button><button data-v="1.25">Fast</button></div></div>
+        <div class="field"><span class="lbl">Photo</span>
+          <div class="seg" id="place" role="radiogroup" aria-label="Photo placement"><button data-v="fit">Whole</button><button data-v="fill">Fill</button></div></div>
+        <div class="field"><span class="lbl">Ending</span>
+          <div class="seg" id="ending" role="radiogroup" aria-label="Ending"><button data-v="flash">Flash</button><button data-v="zoom">Zoom in</button><button data-v="cut">Cut</button></div></div>
+        <div class="field"><span class="lbl">Scanner frame</span>
+          <div class="seg" id="frame" role="radiogroup" aria-label="Scanner frame"><button data-v="round">Round</button><button data-v="square">Square</button><button data-v="off">None</button></div></div>
+        <div class="field"><span class="lbl">QR corner roundness</span>
+          <div class="rangerow"><input type="range" id="round" min="0" max="20" value="6" aria-label="Corner roundness"><output id="roundOut">6%</output></div></div>
+        <div class="field wide">
+          <label class="switch"><input type="checkbox" id="labelOn"><span class="tr"></span>Small label under the QR</label>
+          <div class="labelrow" id="labelRow" hidden><input type="text" id="labelText" value="Opening your gift" maxlength="30" aria-label="Label text"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="make">
+      <div class="row2">
+        <button class="btn primary" id="startBtn" disabled>Make video</button>
+        <button class="btn" id="cancelBtn" hidden>Cancel</button>
+      </div>
+      <div class="progress" id="prog" hidden><div class="bar-track"><i id="barFill"></i></div><span id="progTxt"></span></div>
+      <p class="err" id="err" role="alert"></p>
+    </div>
+  </aside>
+</main>
+
+<script>"use strict";
+var Mp4Muxer = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var __accessCheck = (obj, member, msg) => {
+    if (!member.has(obj))
+      throw TypeError("Cannot " + msg);
+  };
+  var __privateGet = (obj, member, getter) => {
+    __accessCheck(obj, member, "read from private field");
+    return getter ? getter.call(obj) : member.get(obj);
+  };
+  var __privateAdd = (obj, member, value) => {
+    if (member.has(obj))
+      throw TypeError("Cannot add the same private member more than once");
+    member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+  };
+  var __privateSet = (obj, member, value, setter) => {
+    __accessCheck(obj, member, "write to private field");
+    setter ? setter.call(obj, value) : member.set(obj, value);
+    return value;
+  };
+  var __privateWrapper = (obj, member, setter, getter) => ({
+    set _(value) {
+      __privateSet(obj, member, value, setter);
+    },
+    get _() {
+      return __privateGet(obj, member, getter);
+    }
+  });
+  var __privateMethod = (obj, member, method) => {
+    __accessCheck(obj, member, "access private method");
+    return method;
+  };
+
+  // src/index.ts
+  var src_exports = {};
+  __export(src_exports, {
+    ArrayBufferTarget: () => ArrayBufferTarget,
+    FileSystemWritableFileStreamTarget: () => FileSystemWritableFileStreamTarget,
+    Muxer: () => Muxer,
+    StreamTarget: () => StreamTarget
+  });
+
+  // src/misc.ts
+  var bytes = new Uint8Array(8);
+  var view = new DataView(bytes.buffer);
+  var u8 = (value) => {
+    return [(value % 256 + 256) % 256];
+  };
+  var u16 = (value) => {
+    view.setUint16(0, value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var i16 = (value) => {
+    view.setInt16(0, value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var u24 = (value) => {
+    view.setUint32(0, value, false);
+    return [bytes[1], bytes[2], bytes[3]];
+  };
+  var u32 = (value) => {
+    view.setUint32(0, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var i32 = (value) => {
+    view.setInt32(0, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var u64 = (value) => {
+    view.setUint32(0, Math.floor(value / 2 ** 32), false);
+    view.setUint32(4, value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]];
+  };
+  var fixed_8_8 = (value) => {
+    view.setInt16(0, 2 ** 8 * value, false);
+    return [bytes[0], bytes[1]];
+  };
+  var fixed_16_16 = (value) => {
+    view.setInt32(0, 2 ** 16 * value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var fixed_2_30 = (value) => {
+    view.setInt32(0, 2 ** 30 * value, false);
+    return [bytes[0], bytes[1], bytes[2], bytes[3]];
+  };
+  var ascii = (text, nullTerminated = false) => {
+    let bytes2 = Array(text.length).fill(null).map((_, i) => text.charCodeAt(i));
+    if (nullTerminated)
+      bytes2.push(0);
+    return bytes2;
+  };
+  var last = (arr) => {
+    return arr && arr[arr.length - 1];
+  };
+  var lastPresentedSample = (samples) => {
+    let result = void 0;
+    for (let sample of samples) {
+      if (!result || sample.presentationTimestamp > result.presentationTimestamp) {
+        result = sample;
+      }
+    }
+    return result;
+  };
+  var intoTimescale = (timeInSeconds, timescale, round = true) => {
+    let value = timeInSeconds * timescale;
+    return round ? Math.round(value) : value;
+  };
+  var rotationMatrix = (rotationInDegrees) => {
+    let theta = rotationInDegrees * (Math.PI / 180);
+    let cosTheta = Math.cos(theta);
+    let sinTheta = Math.sin(theta);
+    return [
+      cosTheta,
+      sinTheta,
+      0,
+      -sinTheta,
+      cosTheta,
+      0,
+      0,
+      0,
+      1
+    ];
+  };
+  var IDENTITY_MATRIX = rotationMatrix(0);
+  var matrixToBytes = (matrix) => {
+    return [
+      fixed_16_16(matrix[0]),
+      fixed_16_16(matrix[1]),
+      fixed_2_30(matrix[2]),
+      fixed_16_16(matrix[3]),
+      fixed_16_16(matrix[4]),
+      fixed_2_30(matrix[5]),
+      fixed_16_16(matrix[6]),
+      fixed_16_16(matrix[7]),
+      fixed_2_30(matrix[8])
+    ];
+  };
+  var deepClone = (x) => {
+    if (!x)
+      return x;
+    if (typeof x !== "object")
+      return x;
+    if (Array.isArray(x))
+      return x.map(deepClone);
+    return Object.fromEntries(Object.entries(x).map(([key, value]) => [key, deepClone(value)]));
+  };
+  var isU32 = (value) => {
+    return value >= 0 && value < 2 ** 32;
+  };
+
+  // src/box.ts
+  var box = (type, contents, children) => ({
+    type,
+    contents: contents && new Uint8Array(contents.flat(10)),
+    children
+  });
+  var fullBox = (type, version, flags, contents, children) => box(
+    type,
+    [u8(version), u24(flags), contents ?? []],
+    children
+  );
+  var ftyp = (details) => {
+    let minorVersion = 512;
+    if (details.fragmented)
+      return box("ftyp", [
+        ascii("iso5"),
+        // Major brand
+        u32(minorVersion),
+        // Minor version
+        // Compatible brands
+        ascii("iso5"),
+        ascii("iso6"),
+        ascii("mp41")
+      ]);
+    return box("ftyp", [
+      ascii("isom"),
+      // Major brand
+      u32(minorVersion),
+      // Minor version
+      // Compatible brands
+      ascii("isom"),
+      details.holdsAvc ? ascii("avc1") : [],
+      ascii("mp41")
+    ]);
+  };
+  var mdat = (reserveLargeSize) => ({ type: "mdat", largeSize: reserveLargeSize });
+  var free = (size) => ({ type: "free", size });
+  var moov = (tracks, creationTime, fragmented = false) => box("moov", null, [
+    mvhd(creationTime, tracks),
+    ...tracks.map((x) => trak(x, creationTime)),
+    fragmented ? mvex(tracks) : null
+  ]);
+  var mvhd = (creationTime, tracks) => {
+    let duration = intoTimescale(Math.max(
+      0,
+      ...tracks.filter((x) => x.samples.length > 0).map((x) => {
+        const lastSample = lastPresentedSample(x.samples);
+        return lastSample.presentationTimestamp + lastSample.duration;
+      })
+    ), GLOBAL_TIMESCALE);
+    let nextTrackId = Math.max(...tracks.map((x) => x.id)) + 1;
+    let needsU64 = !isU32(creationTime) || !isU32(duration);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    return fullBox("mvhd", +needsU64, 0, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(GLOBAL_TIMESCALE),
+      // Timescale
+      u32OrU64(duration),
+      // Duration
+      fixed_16_16(1),
+      // Preferred rate
+      fixed_8_8(1),
+      // Preferred volume
+      Array(10).fill(0),
+      // Reserved
+      matrixToBytes(IDENTITY_MATRIX),
+      // Matrix
+      Array(24).fill(0),
+      // Pre-defined
+      u32(nextTrackId)
+      // Next track ID
+    ]);
+  };
+  var trak = (track, creationTime) => box("trak", null, [
+    tkhd(track, creationTime),
+    mdia(track, creationTime)
+  ]);
+  var tkhd = (track, creationTime) => {
+    let lastSample = lastPresentedSample(track.samples);
+    let durationInGlobalTimescale = intoTimescale(
+      lastSample ? lastSample.presentationTimestamp + lastSample.duration : 0,
+      GLOBAL_TIMESCALE
+    );
+    let needsU64 = !isU32(creationTime) || !isU32(durationInGlobalTimescale);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    let matrix;
+    if (track.info.type === "video") {
+      matrix = typeof track.info.rotation === "number" ? rotationMatrix(track.info.rotation) : track.info.rotation;
+    } else {
+      matrix = IDENTITY_MATRIX;
+    }
+    return fullBox("tkhd", +needsU64, 3, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(track.id),
+      // Track ID
+      u32(0),
+      // Reserved
+      u32OrU64(durationInGlobalTimescale),
+      // Duration
+      Array(8).fill(0),
+      // Reserved
+      u16(0),
+      // Layer
+      u16(0),
+      // Alternate group
+      fixed_8_8(track.info.type === "audio" ? 1 : 0),
+      // Volume
+      u16(0),
+      // Reserved
+      matrixToBytes(matrix),
+      // Matrix
+      fixed_16_16(track.info.type === "video" ? track.info.width : 0),
+      // Track width
+      fixed_16_16(track.info.type === "video" ? track.info.height : 0)
+      // Track height
+    ]);
+  };
+  var mdia = (track, creationTime) => box("mdia", null, [
+    mdhd(track, creationTime),
+    hdlr(track.info.type === "video" ? "vide" : "soun"),
+    minf(track)
+  ]);
+  var mdhd = (track, creationTime) => {
+    let lastSample = lastPresentedSample(track.samples);
+    let localDuration = intoTimescale(
+      lastSample ? lastSample.presentationTimestamp + lastSample.duration : 0,
+      track.timescale
+    );
+    let needsU64 = !isU32(creationTime) || !isU32(localDuration);
+    let u32OrU64 = needsU64 ? u64 : u32;
+    return fullBox("mdhd", +needsU64, 0, [
+      u32OrU64(creationTime),
+      // Creation time
+      u32OrU64(creationTime),
+      // Modification time
+      u32(track.timescale),
+      // Timescale
+      u32OrU64(localDuration),
+      // Duration
+      u16(21956),
+      // Language ("und", undetermined)
+      u16(0)
+      // Quality
+    ]);
+  };
+  var hdlr = (componentSubtype) => fullBox("hdlr", 0, 0, [
+    ascii("mhlr"),
+    // Component type
+    ascii(componentSubtype),
+    // Component subtype
+    u32(0),
+    // Component manufacturer
+    u32(0),
+    // Component flags
+    u32(0),
+    // Component flags mask
+    ascii("mp4-muxer-hdlr", true)
+    // Component name
+  ]);
+  var minf = (track) => box("minf", null, [
+    track.info.type === "video" ? vmhd() : smhd(),
+    dinf(),
+    stbl(track)
+  ]);
+  var vmhd = () => fullBox("vmhd", 0, 1, [
+    u16(0),
+    // Graphics mode
+    u16(0),
+    // Opcolor R
+    u16(0),
+    // Opcolor G
+    u16(0)
+    // Opcolor B
+  ]);
+  var smhd = () => fullBox("smhd", 0, 0, [
+    u16(0),
+    // Balance
+    u16(0)
+    // Reserved
+  ]);
+  var dinf = () => box("dinf", null, [
+    dref()
+  ]);
+  var dref = () => fullBox("dref", 0, 0, [
+    u32(1)
+    // Entry count
+  ], [
+    url()
+  ]);
+  var url = () => fullBox("url ", 0, 1);
+  var stbl = (track) => {
+    const needsCtts = track.compositionTimeOffsetTable.length > 1 || track.compositionTimeOffsetTable.some((x) => x.sampleCompositionTimeOffset !== 0);
+    return box("stbl", null, [
+      stsd(track),
+      stts(track),
+      stss(track),
+      stsc(track),
+      stsz(track),
+      stco(track),
+      needsCtts ? ctts(track) : null
+    ]);
+  };
+  var stsd = (track) => fullBox("stsd", 0, 0, [
+    u32(1)
+    // Entry count
+  ], [
+    track.info.type === "video" ? videoSampleDescription(
+      VIDEO_CODEC_TO_BOX_NAME[track.info.codec],
+      track
+    ) : soundSampleDescription(
+      AUDIO_CODEC_TO_BOX_NAME[track.info.codec],
+      track
+    )
+  ]);
+  var videoSampleDescription = (compressionType, track) => box(compressionType, [
+    Array(6).fill(0),
+    // Reserved
+    u16(1),
+    // Data reference index
+    u16(0),
+    // Pre-defined
+    u16(0),
+    // Reserved
+    Array(12).fill(0),
+    // Pre-defined
+    u16(track.info.width),
+    // Width
+    u16(track.info.height),
+    // Height
+    u32(4718592),
+    // Horizontal resolution
+    u32(4718592),
+    // Vertical resolution
+    u32(0),
+    // Reserved
+    u16(1),
+    // Frame count
+    Array(32).fill(0),
+    // Compressor name
+    u16(24),
+    // Depth
+    i16(65535)
+    // Pre-defined
+  ], [
+    VIDEO_CODEC_TO_CONFIGURATION_BOX[track.info.codec](track)
+  ]);
+  var avcC = (track) => track.info.decoderConfig && box("avcC", [
+    // For AVC, description is an AVCDecoderConfigurationRecord, so nothing else to do here
+    ...new Uint8Array(track.info.decoderConfig.description)
+  ]);
+  var hvcC = (track) => track.info.decoderConfig && box("hvcC", [
+    // For HEVC, description is a HEVCDecoderConfigurationRecord, so nothing else to do here
+    ...new Uint8Array(track.info.decoderConfig.description)
+  ]);
+  var vpcC = (track) => {
+    if (!track.info.decoderConfig) {
+      return null;
+    }
+    let decoderConfig = track.info.decoderConfig;
+    if (!decoderConfig.colorSpace) {
+      throw new Error(`'colorSpace' is required in the decoder config for VP9.`);
+    }
+    let parts = decoderConfig.codec.split(".");
+    let profile = Number(parts[1]);
+    let level = Number(parts[2]);
+    let bitDepth = Number(parts[3]);
+    let chromaSubsampling = 0;
+    let thirdByte = (bitDepth << 4) + (chromaSubsampling << 1) + Number(decoderConfig.colorSpace.fullRange);
+    let colourPrimaries = 2;
+    let transferCharacteristics = 2;
+    let matrixCoefficients = 2;
+    return fullBox("vpcC", 1, 0, [
+      u8(profile),
+      // Profile
+      u8(level),
+      // Level
+      u8(thirdByte),
+      // Bit depth, chroma subsampling, full range
+      u8(colourPrimaries),
+      // Colour primaries
+      u8(transferCharacteristics),
+      // Transfer characteristics
+      u8(matrixCoefficients),
+      // Matrix coefficients
+      u16(0)
+      // Codec initialization data size
+    ]);
+  };
+  var av1C = () => {
+    let marker = 1;
+    let version = 1;
+    let firstByte = (marker << 7) + version;
+    return box("av1C", [
+      firstByte,
+      0,
+      0,
+      0
+    ]);
+  };
+  var soundSampleDescription = (compressionType, track) => box(compressionType, [
+    Array(6).fill(0),
+    // Reserved
+    u16(1),
+    // Data reference index
+    u16(0),
+    // Version
+    u16(0),
+    // Revision level
+    u32(0),
+    // Vendor
+    u16(track.info.numberOfChannels),
+    // Number of channels
+    u16(16),
+    // Sample size (bits)
+    u16(0),
+    // Compression ID
+    u16(0),
+    // Packet size
+    fixed_16_16(track.info.sampleRate)
+    // Sample rate
+  ], [
+    AUDIO_CODEC_TO_CONFIGURATION_BOX[track.info.codec](track)
+  ]);
+  var esds = (track) => {
+    let description = new Uint8Array(track.info.decoderConfig.description);
+    return fullBox("esds", 0, 0, [
+      // https://stackoverflow.com/a/54803118
+      u32(58753152),
+      // TAG(3) = Object Descriptor ([2])
+      u8(32 + description.byteLength),
+      // length of this OD (which includes the next 2 tags)
+      u16(1),
+      // ES_ID = 1
+      u8(0),
+      // flags etc = 0
+      u32(75530368),
+      // TAG(4) = ES Descriptor ([2]) embedded in above OD
+      u8(18 + description.byteLength),
+      // length of this ESD
+      u8(64),
+      // MPEG-4 Audio
+      u8(21),
+      // stream type(6bits)=5 audio, flags(2bits)=1
+      u24(0),
+      // 24bit buffer size
+      u32(130071),
+      // max bitrate
+      u32(130071),
+      // avg bitrate
+      u32(92307584),
+      // TAG(5) = ASC ([2],[3]) embedded in above OD
+      u8(description.byteLength),
+      // length
+      ...description,
+      u32(109084800),
+      // TAG(6)
+      u8(1),
+      // length
+      u8(2)
+      // data
+    ]);
+  };
+  var dOps = (track) => {
+    let preskip = 3840;
+    let gain = 0;
+    const description = track.info.decoderConfig?.description;
+    if (description) {
+      if (description.byteLength < 18) {
+        throw new TypeError("Invalid decoder description provided for Opus; must be at least 18 bytes long.");
+      }
+      const view2 = ArrayBuffer.isView(description) ? new DataView(description.buffer, description.byteOffset, description.byteLength) : new DataView(description);
+      preskip = view2.getUint16(10, true);
+      gain = view2.getInt16(14, true);
+    }
+    return box("dOps", [
+      u8(0),
+      // Version
+      u8(track.info.numberOfChannels),
+      // OutputChannelCount
+      u16(preskip),
+      u32(track.info.sampleRate),
+      // InputSampleRate
+      fixed_8_8(gain),
+      // OutputGain
+      u8(0)
+      // ChannelMappingFamily
+    ]);
+  };
+  var stts = (track) => {
+    return fullBox("stts", 0, 0, [
+      u32(track.timeToSampleTable.length),
+      // Number of entries
+      track.timeToSampleTable.map((x) => [
+        // Time-to-sample table
+        u32(x.sampleCount),
+        // Sample count
+        u32(x.sampleDelta)
+        // Sample duration
+      ])
+    ]);
+  };
+  var stss = (track) => {
+    if (track.samples.every((x) => x.type === "key"))
+      return null;
+    let keySamples = [...track.samples.entries()].filter(([, sample]) => sample.type === "key");
+    return fullBox("stss", 0, 0, [
+      u32(keySamples.length),
+      // Number of entries
+      keySamples.map(([index]) => u32(index + 1))
+      // Sync sample table
+    ]);
+  };
+  var stsc = (track) => {
+    return fullBox("stsc", 0, 0, [
+      u32(track.compactlyCodedChunkTable.length),
+      // Number of entries
+      track.compactlyCodedChunkTable.map((x) => [
+        // Sample-to-chunk table
+        u32(x.firstChunk),
+        // First chunk
+        u32(x.samplesPerChunk),
+        // Samples per chunk
+        u32(1)
+        // Sample description index
+      ])
+    ]);
+  };
+  var stsz = (track) => fullBox("stsz", 0, 0, [
+    u32(0),
+    // Sample size (0 means non-constant size)
+    u32(track.samples.length),
+    // Number of entries
+    track.samples.map((x) => u32(x.size))
+    // Sample size table
+  ]);
+  var stco = (track) => {
+    if (track.finalizedChunks.length > 0 && last(track.finalizedChunks).offset >= 2 ** 32) {
+      return fullBox("co64", 0, 0, [
+        u32(track.finalizedChunks.length),
+        // Number of entries
+        track.finalizedChunks.map((x) => u64(x.offset))
+        // Chunk offset table
+      ]);
+    }
+    return fullBox("stco", 0, 0, [
+      u32(track.finalizedChunks.length),
+      // Number of entries
+      track.finalizedChunks.map((x) => u32(x.offset))
+      // Chunk offset table
+    ]);
+  };
+  var ctts = (track) => {
+    return fullBox("ctts", 0, 0, [
+      u32(track.compositionTimeOffsetTable.length),
+      // Number of entries
+      track.compositionTimeOffsetTable.map((x) => [
+        // Time-to-sample table
+        u32(x.sampleCount),
+        // Sample count
+        u32(x.sampleCompositionTimeOffset)
+        // Sample offset
+      ])
+    ]);
+  };
+  var mvex = (tracks) => {
+    return box("mvex", null, tracks.map(trex));
+  };
+  var trex = (track) => {
+    return fullBox("trex", 0, 0, [
+      u32(track.id),
+      // Track ID
+      u32(1),
+      // Default sample description index
+      u32(0),
+      // Default sample duration
+      u32(0),
+      // Default sample size
+      u32(0)
+      // Default sample flags
+    ]);
+  };
+  var moof = (sequenceNumber, tracks) => {
+    return box("moof", null, [
+      mfhd(sequenceNumber),
+      ...tracks.map(traf)
+    ]);
+  };
+  var mfhd = (sequenceNumber) => {
+    return fullBox("mfhd", 0, 0, [
+      u32(sequenceNumber)
+      // Sequence number
+    ]);
+  };
+  var fragmentSampleFlags = (sample) => {
+    let byte1 = 0;
+    let byte2 = 0;
+    let byte3 = 0;
+    let byte4 = 0;
+    let sampleIsDifferenceSample = sample.type === "delta";
+    byte2 |= +sampleIsDifferenceSample;
+    if (sampleIsDifferenceSample) {
+      byte1 |= 1;
+    } else {
+      byte1 |= 2;
+    }
+    return byte1 << 24 | byte2 << 16 | byte3 << 8 | byte4;
+  };
+  var traf = (track) => {
+    return box("traf", null, [
+      tfhd(track),
+      tfdt(track),
+      trun(track)
+    ]);
+  };
+  var tfhd = (track) => {
+    let tfFlags = 0;
+    tfFlags |= 8;
+    tfFlags |= 16;
+    tfFlags |= 32;
+    tfFlags |= 131072;
+    let referenceSample = track.currentChunk.samples[1] ?? track.currentChunk.samples[0];
+    let referenceSampleInfo = {
+      duration: referenceSample.timescaleUnitsToNextSample,
+      size: referenceSample.size,
+      flags: fragmentSampleFlags(referenceSample)
+    };
+    return fullBox("tfhd", 0, tfFlags, [
+      u32(track.id),
+      // Track ID
+      u32(referenceSampleInfo.duration),
+      // Default sample duration
+      u32(referenceSampleInfo.size),
+      // Default sample size
+      u32(referenceSampleInfo.flags)
+      // Default sample flags
+    ]);
+  };
+  var tfdt = (track) => {
+    return fullBox("tfdt", 1, 0, [
+      u64(intoTimescale(track.currentChunk.startTimestamp, track.timescale))
+      // Base Media Decode Time
+    ]);
+  };
+  var trun = (track) => {
+    let allSampleDurations = track.currentChunk.samples.map((x) => x.timescaleUnitsToNextSample);
+    let allSampleSizes = track.currentChunk.samples.map((x) => x.size);
+    let allSampleFlags = track.currentChunk.samples.map(fragmentSampleFlags);
+    let allSampleCompositionTimeOffsets = track.currentChunk.samples.map((x) => intoTimescale(x.presentationTimestamp - x.decodeTimestamp, track.timescale));
+    let uniqueSampleDurations = new Set(allSampleDurations);
+    let uniqueSampleSizes = new Set(allSampleSizes);
+    let uniqueSampleFlags = new Set(allSampleFlags);
+    let uniqueSampleCompositionTimeOffsets = new Set(allSampleCompositionTimeOffsets);
+    let firstSampleFlagsPresent = uniqueSampleFlags.size === 2 && allSampleFlags[0] !== allSampleFlags[1];
+    let sampleDurationPresent = uniqueSampleDurations.size > 1;
+    let sampleSizePresent = uniqueSampleSizes.size > 1;
+    let sampleFlagsPresent = !firstSampleFlagsPresent && uniqueSampleFlags.size > 1;
+    let sampleCompositionTimeOffsetsPresent = uniqueSampleCompositionTimeOffsets.size > 1 || [...uniqueSampleCompositionTimeOffsets].some((x) => x !== 0);
+    let flags = 0;
+    flags |= 1;
+    flags |= 4 * +firstSampleFlagsPresent;
+    flags |= 256 * +sampleDurationPresent;
+    flags |= 512 * +sampleSizePresent;
+    flags |= 1024 * +sampleFlagsPresent;
+    flags |= 2048 * +sampleCompositionTimeOffsetsPresent;
+    return fullBox("trun", 1, flags, [
+      u32(track.currentChunk.samples.length),
+      // Sample count
+      u32(track.currentChunk.offset - track.currentChunk.moofOffset || 0),
+      // Data offset
+      firstSampleFlagsPresent ? u32(allSampleFlags[0]) : [],
+      track.currentChunk.samples.map((_, i) => [
+        sampleDurationPresent ? u32(allSampleDurations[i]) : [],
+        // Sample duration
+        sampleSizePresent ? u32(allSampleSizes[i]) : [],
+        // Sample size
+        sampleFlagsPresent ? u32(allSampleFlags[i]) : [],
+        // Sample flags
+        // Sample composition time offsets
+        sampleCompositionTimeOffsetsPresent ? i32(allSampleCompositionTimeOffsets[i]) : []
+      ])
+    ]);
+  };
+  var mfra = (tracks) => {
+    return box("mfra", null, [
+      ...tracks.map(tfra),
+      mfro()
+    ]);
+  };
+  var tfra = (track, trackIndex) => {
+    let version = 1;
+    return fullBox("tfra", version, 0, [
+      u32(track.id),
+      // Track ID
+      u32(63),
+      // This specifies that traf number, trun number and sample number are 32-bit ints
+      u32(track.finalizedChunks.length),
+      // Number of entries
+      track.finalizedChunks.map((chunk) => [
+        u64(intoTimescale(chunk.startTimestamp, track.timescale)),
+        // Time
+        u64(chunk.moofOffset),
+        // moof offset
+        u32(trackIndex + 1),
+        // traf number
+        u32(1),
+        // trun number
+        u32(1)
+        // Sample number
+      ])
+    ]);
+  };
+  var mfro = () => {
+    return fullBox("mfro", 0, 0, [
+      // This value needs to be overwritten manually from the outside, where the actual size of the enclosing mfra box
+      // is known
+      u32(0)
+      // Size
+    ]);
+  };
+  var VIDEO_CODEC_TO_BOX_NAME = {
+    "avc": "avc1",
+    "hevc": "hvc1",
+    "vp9": "vp09",
+    "av1": "av01"
+  };
+  var VIDEO_CODEC_TO_CONFIGURATION_BOX = {
+    "avc": avcC,
+    "hevc": hvcC,
+    "vp9": vpcC,
+    "av1": av1C
+  };
+  var AUDIO_CODEC_TO_BOX_NAME = {
+    "aac": "mp4a",
+    "opus": "Opus"
+  };
+  var AUDIO_CODEC_TO_CONFIGURATION_BOX = {
+    "aac": esds,
+    "opus": dOps
+  };
+
+  // src/target.ts
+  var isTarget = Symbol("isTarget");
+  var Target = class {
+  };
+  isTarget;
+  var ArrayBufferTarget = class extends Target {
+    constructor() {
+      super(...arguments);
+      this.buffer = null;
+    }
+  };
+  var StreamTarget = class extends Target {
+    constructor(options) {
+      super();
+      this.options = options;
+      if (typeof options !== "object") {
+        throw new TypeError("StreamTarget requires an options object to be passed to its constructor.");
+      }
+      if (options.onData) {
+        if (typeof options.onData !== "function") {
+          throw new TypeError("options.onData, when provided, must be a function.");
+        }
+        if (options.onData.length < 2) {
+          throw new TypeError(
+            "options.onData, when provided, must be a function that takes in at least two arguments (data and position). Ignoring the position argument, which specifies the byte offset at which the data is to be written, can lead to broken outputs."
+          );
+        }
+      }
+      if (options.chunked !== void 0 && typeof options.chunked !== "boolean") {
+        throw new TypeError("options.chunked, when provided, must be a boolean.");
+      }
+      if (options.chunkSize !== void 0 && (!Number.isInteger(options.chunkSize) || options.chunkSize <= 0)) {
+        throw new TypeError("options.chunkSize, when provided, must be a positive integer.");
+      }
+    }
+  };
+  var FileSystemWritableFileStreamTarget = class extends Target {
+    constructor(stream, options) {
+      super();
+      this.stream = stream;
+      this.options = options;
+      if (!(stream instanceof FileSystemWritableFileStream)) {
+        throw new TypeError("FileSystemWritableFileStreamTarget requires a FileSystemWritableFileStream instance.");
+      }
+      if (options !== void 0 && typeof options !== "object") {
+        throw new TypeError("FileSystemWritableFileStreamTarget's options, when provided, must be an object.");
+      }
+      if (options) {
+        if (options.chunkSize !== void 0 && (!Number.isInteger(options.chunkSize) || options.chunkSize <= 0)) {
+          throw new TypeError("options.chunkSize, when provided, must be a positive integer");
+        }
+      }
+    }
+  };
+
+  // src/writer.ts
+  var _helper, _helperView;
+  var Writer = class {
+    constructor() {
+      this.pos = 0;
+      __privateAdd(this, _helper, new Uint8Array(8));
+      __privateAdd(this, _helperView, new DataView(__privateGet(this, _helper).buffer));
+      /**
+       * Stores the position from the start of the file to where boxes elements have been written. This is used to
+       * rewrite/edit elements that were already added before, and to measure sizes of things.
+       */
+      this.offsets = /* @__PURE__ */ new WeakMap();
+    }
+    /** Sets the current position for future writes to a new one. */
+    seek(newPos) {
+      this.pos = newPos;
+    }
+    writeU32(value) {
+      __privateGet(this, _helperView).setUint32(0, value, false);
+      this.write(__privateGet(this, _helper).subarray(0, 4));
+    }
+    writeU64(value) {
+      __privateGet(this, _helperView).setUint32(0, Math.floor(value / 2 ** 32), false);
+      __privateGet(this, _helperView).setUint32(4, value, false);
+      this.write(__privateGet(this, _helper).subarray(0, 8));
+    }
+    writeAscii(text) {
+      for (let i = 0; i < text.length; i++) {
+        __privateGet(this, _helperView).setUint8(i % 8, text.charCodeAt(i));
+        if (i % 8 === 7)
+          this.write(__privateGet(this, _helper));
+      }
+      if (text.length % 8 !== 0) {
+        this.write(__privateGet(this, _helper).subarray(0, text.length % 8));
+      }
+    }
+    writeBox(box2) {
+      this.offsets.set(box2, this.pos);
+      if (box2.contents && !box2.children) {
+        this.writeBoxHeader(box2, box2.size ?? box2.contents.byteLength + 8);
+        this.write(box2.contents);
+      } else {
+        let startPos = this.pos;
+        this.writeBoxHeader(box2, 0);
+        if (box2.contents)
+          this.write(box2.contents);
+        if (box2.children) {
+          for (let child of box2.children)
+            if (child)
+              this.writeBox(child);
+        }
+        let endPos = this.pos;
+        let size = box2.size ?? endPos - startPos;
+        this.seek(startPos);
+        this.writeBoxHeader(box2, size);
+        this.seek(endPos);
+      }
+    }
+    writeBoxHeader(box2, size) {
+      this.writeU32(box2.largeSize ? 1 : size);
+      this.writeAscii(box2.type);
+      if (box2.largeSize)
+        this.writeU64(size);
+    }
+    measureBoxHeader(box2) {
+      return 8 + (box2.largeSize ? 8 : 0);
+    }
+    patchBox(box2) {
+      let endPos = this.pos;
+      this.seek(this.offsets.get(box2));
+      this.writeBox(box2);
+      this.seek(endPos);
+    }
+    measureBox(box2) {
+      if (box2.contents && !box2.children) {
+        let headerSize = this.measureBoxHeader(box2);
+        return headerSize + box2.contents.byteLength;
+      } else {
+        let result = this.measureBoxHeader(box2);
+        if (box2.contents)
+          result += box2.contents.byteLength;
+        if (box2.children) {
+          for (let child of box2.children)
+            if (child)
+              result += this.measureBox(child);
+        }
+        return result;
+      }
+    }
+  };
+  _helper = new WeakMap();
+  _helperView = new WeakMap();
+  var _target, _buffer, _bytes, _maxPos, _ensureSize, ensureSize_fn;
+  var ArrayBufferTargetWriter = class extends Writer {
+    constructor(target) {
+      super();
+      __privateAdd(this, _ensureSize);
+      __privateAdd(this, _target, void 0);
+      __privateAdd(this, _buffer, new ArrayBuffer(2 ** 16));
+      __privateAdd(this, _bytes, new Uint8Array(__privateGet(this, _buffer)));
+      __privateAdd(this, _maxPos, 0);
+      __privateSet(this, _target, target);
+    }
+    write(data) {
+      __privateMethod(this, _ensureSize, ensureSize_fn).call(this, this.pos + data.byteLength);
+      __privateGet(this, _bytes).set(data, this.pos);
+      this.pos += data.byteLength;
+      __privateSet(this, _maxPos, Math.max(__privateGet(this, _maxPos), this.pos));
+    }
+    finalize() {
+      __privateMethod(this, _ensureSize, ensureSize_fn).call(this, this.pos);
+      __privateGet(this, _target).buffer = __privateGet(this, _buffer).slice(0, Math.max(__privateGet(this, _maxPos), this.pos));
+    }
+  };
+  _target = new WeakMap();
+  _buffer = new WeakMap();
+  _bytes = new WeakMap();
+  _maxPos = new WeakMap();
+  _ensureSize = new WeakSet();
+  ensureSize_fn = function(size) {
+    let newLength = __privateGet(this, _buffer).byteLength;
+    while (newLength < size)
+      newLength *= 2;
+    if (newLength === __privateGet(this, _buffer).byteLength)
+      return;
+    let newBuffer = new ArrayBuffer(newLength);
+    let newBytes = new Uint8Array(newBuffer);
+    newBytes.set(__privateGet(this, _bytes), 0);
+    __privateSet(this, _buffer, newBuffer);
+    __privateSet(this, _bytes, newBytes);
+  };
+  var _target2, _sections;
+  var StreamTargetWriter = class extends Writer {
+    constructor(target) {
+      super();
+      __privateAdd(this, _target2, void 0);
+      __privateAdd(this, _sections, []);
+      __privateSet(this, _target2, target);
+    }
+    write(data) {
+      __privateGet(this, _sections).push({
+        data: data.slice(),
+        start: this.pos
+      });
+      this.pos += data.byteLength;
+    }
+    flush() {
+      if (__privateGet(this, _sections).length === 0)
+        return;
+      let chunks = [];
+      let sorted = [...__privateGet(this, _sections)].sort((a, b) => a.start - b.start);
+      chunks.push({
+        start: sorted[0].start,
+        size: sorted[0].data.byteLength
+      });
+      for (let i = 1; i < sorted.length; i++) {
+        let lastChunk = chunks[chunks.length - 1];
+        let section = sorted[i];
+        if (section.start <= lastChunk.start + lastChunk.size) {
+          lastChunk.size = Math.max(lastChunk.size, section.start + section.data.byteLength - lastChunk.start);
+        } else {
+          chunks.push({
+            start: section.start,
+            size: section.data.byteLength
+          });
+        }
+      }
+      for (let chunk of chunks) {
+        chunk.data = new Uint8Array(chunk.size);
+        for (let section of __privateGet(this, _sections)) {
+          if (chunk.start <= section.start && section.start < chunk.start + chunk.size) {
+            chunk.data.set(section.data, section.start - chunk.start);
+          }
+        }
+        __privateGet(this, _target2).options.onData?.(chunk.data, chunk.start);
+      }
+      __privateGet(this, _sections).length = 0;
+    }
+    finalize() {
+    }
+  };
+  _target2 = new WeakMap();
+  _sections = new WeakMap();
+  var DEFAULT_CHUNK_SIZE = 2 ** 24;
+  var MAX_CHUNKS_AT_ONCE = 2;
+  var _target3, _chunkSize, _chunks, _writeDataIntoChunks, writeDataIntoChunks_fn, _insertSectionIntoChunk, insertSectionIntoChunk_fn, _createChunk, createChunk_fn, _flushChunks, flushChunks_fn;
+  var ChunkedStreamTargetWriter = class extends Writer {
+    constructor(target) {
+      super();
+      __privateAdd(this, _writeDataIntoChunks);
+      __privateAdd(this, _insertSectionIntoChunk);
+      __privateAdd(this, _createChunk);
+      __privateAdd(this, _flushChunks);
+      __privateAdd(this, _target3, void 0);
+      __privateAdd(this, _chunkSize, void 0);
+      /**
+       * The data is divided up into fixed-size chunks, whose contents are first filled in RAM and then flushed out.
+       * A chunk is flushed if all of its contents have been written.
+       */
+      __privateAdd(this, _chunks, []);
+      __privateSet(this, _target3, target);
+      __privateSet(this, _chunkSize, target.options?.chunkSize ?? DEFAULT_CHUNK_SIZE);
+      if (!Number.isInteger(__privateGet(this, _chunkSize)) || __privateGet(this, _chunkSize) < 2 ** 10) {
+        throw new Error("Invalid StreamTarget options: chunkSize must be an integer not smaller than 1024.");
+      }
+    }
+    write(data) {
+      __privateMethod(this, _writeDataIntoChunks, writeDataIntoChunks_fn).call(this, data, this.pos);
+      __privateMethod(this, _flushChunks, flushChunks_fn).call(this);
+      this.pos += data.byteLength;
+    }
+    finalize() {
+      __privateMethod(this, _flushChunks, flushChunks_fn).call(this, true);
+    }
+  };
+  _target3 = new WeakMap();
+  _chunkSize = new WeakMap();
+  _chunks = new WeakMap();
+  _writeDataIntoChunks = new WeakSet();
+  writeDataIntoChunks_fn = function(data, position) {
+    let chunkIndex = __privateGet(this, _chunks).findIndex((x) => x.start <= position && position < x.start + __privateGet(this, _chunkSize));
+    if (chunkIndex === -1)
+      chunkIndex = __privateMethod(this, _createChunk, createChunk_fn).call(this, position);
+    let chunk = __privateGet(this, _chunks)[chunkIndex];
+    let relativePosition = position - chunk.start;
+    let toWrite = data.subarray(0, Math.min(__privateGet(this, _chunkSize) - relativePosition, data.byteLength));
+    chunk.data.set(toWrite, relativePosition);
+    let section = {
+      start: relativePosition,
+      end: relativePosition + toWrite.byteLength
+    };
+    __privateMethod(this, _insertSectionIntoChunk, insertSectionIntoChunk_fn).call(this, chunk, section);
+    if (chunk.written[0].start === 0 && chunk.written[0].end === __privateGet(this, _chunkSize)) {
+      chunk.shouldFlush = true;
+    }
+    if (__privateGet(this, _chunks).length > MAX_CHUNKS_AT_ONCE) {
+      for (let i = 0; i < __privateGet(this, _chunks).length - 1; i++) {
+        __privateGet(this, _chunks)[i].shouldFlush = true;
+      }
+      __privateMethod(this, _flushChunks, flushChunks_fn).call(this);
+    }
+    if (toWrite.byteLength < data.byteLength) {
+      __privateMethod(this, _writeDataIntoChunks, writeDataIntoChunks_fn).call(this, data.subarray(toWrite.byteLength), position + toWrite.byteLength);
+    }
+  };
+  _insertSectionIntoChunk = new WeakSet();
+  insertSectionIntoChunk_fn = function(chunk, section) {
+    let low = 0;
+    let high = chunk.written.length - 1;
+    let index = -1;
+    while (low <= high) {
+      let mid = Math.floor(low + (high - low + 1) / 2);
+      if (chunk.written[mid].start <= section.start) {
+        low = mid + 1;
+        index = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+    chunk.written.splice(index + 1, 0, section);
+    if (index === -1 || chunk.written[index].end < section.start)
+      index++;
+    while (index < chunk.written.length - 1 && chunk.written[index].end >= chunk.written[index + 1].start) {
+      chunk.written[index].end = Math.max(chunk.written[index].end, chunk.written[index + 1].end);
+      chunk.written.splice(index + 1, 1);
+    }
+  };
+  _createChunk = new WeakSet();
+  createChunk_fn = function(includesPosition) {
+    let start = Math.floor(includesPosition / __privateGet(this, _chunkSize)) * __privateGet(this, _chunkSize);
+    let chunk = {
+      start,
+      data: new Uint8Array(__privateGet(this, _chunkSize)),
+      written: [],
+      shouldFlush: false
+    };
+    __privateGet(this, _chunks).push(chunk);
+    __privateGet(this, _chunks).sort((a, b) => a.start - b.start);
+    return __privateGet(this, _chunks).indexOf(chunk);
+  };
+  _flushChunks = new WeakSet();
+  flushChunks_fn = function(force = false) {
+    for (let i = 0; i < __privateGet(this, _chunks).length; i++) {
+      let chunk = __privateGet(this, _chunks)[i];
+      if (!chunk.shouldFlush && !force)
+        continue;
+      for (let section of chunk.written) {
+        __privateGet(this, _target3).options.onData?.(
+          chunk.data.subarray(section.start, section.end),
+          chunk.start + section.start
+        );
+      }
+      __privateGet(this, _chunks).splice(i--, 1);
+    }
+  };
+  var FileSystemWritableFileStreamTargetWriter = class extends ChunkedStreamTargetWriter {
+    constructor(target) {
+      super(new StreamTarget({
+        onData: (data, position) => target.stream.write({
+          type: "write",
+          data,
+          position
+        }),
+        chunkSize: target.options?.chunkSize
+      }));
+    }
+  };
+
+  // src/muxer.ts
+  var GLOBAL_TIMESCALE = 1e3;
+  var SUPPORTED_VIDEO_CODECS = ["avc", "hevc", "vp9", "av1"];
+  var SUPPORTED_AUDIO_CODECS = ["aac", "opus"];
+  var TIMESTAMP_OFFSET = 2082844800;
+  var FIRST_TIMESTAMP_BEHAVIORS = ["strict", "offset", "cross-track-offset"];
+  var _options, _writer, _ftypSize, _mdat, _videoTrack, _audioTrack, _creationTime, _finalizedChunks, _nextFragmentNumber, _videoSampleQueue, _audioSampleQueue, _finalized, _validateOptions, validateOptions_fn, _writeHeader, writeHeader_fn, _computeMoovSizeUpperBound, computeMoovSizeUpperBound_fn, _prepareTracks, prepareTracks_fn, _generateMpeg4AudioSpecificConfig, generateMpeg4AudioSpecificConfig_fn, _createSampleForTrack, createSampleForTrack_fn, _addSampleToTrack, addSampleToTrack_fn, _validateTimestamp, validateTimestamp_fn, _finalizeCurrentChunk, finalizeCurrentChunk_fn, _finalizeFragment, finalizeFragment_fn, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn, _ensureNotFinalized, ensureNotFinalized_fn;
+  var Muxer = class {
+    constructor(options) {
+      __privateAdd(this, _validateOptions);
+      __privateAdd(this, _writeHeader);
+      __privateAdd(this, _computeMoovSizeUpperBound);
+      __privateAdd(this, _prepareTracks);
+      // https://wiki.multimedia.cx/index.php/MPEG-4_Audio
+      __privateAdd(this, _generateMpeg4AudioSpecificConfig);
+      __privateAdd(this, _createSampleForTrack);
+      __privateAdd(this, _addSampleToTrack);
+      __privateAdd(this, _validateTimestamp);
+      __privateAdd(this, _finalizeCurrentChunk);
+      __privateAdd(this, _finalizeFragment);
+      __privateAdd(this, _maybeFlushStreamingTargetWriter);
+      __privateAdd(this, _ensureNotFinalized);
+      __privateAdd(this, _options, void 0);
+      __privateAdd(this, _writer, void 0);
+      __privateAdd(this, _ftypSize, void 0);
+      __privateAdd(this, _mdat, void 0);
+      __privateAdd(this, _videoTrack, null);
+      __privateAdd(this, _audioTrack, null);
+      __privateAdd(this, _creationTime, Math.floor(Date.now() / 1e3) + TIMESTAMP_OFFSET);
+      __privateAdd(this, _finalizedChunks, []);
+      // Fields for fragmented MP4:
+      __privateAdd(this, _nextFragmentNumber, 1);
+      __privateAdd(this, _videoSampleQueue, []);
+      __privateAdd(this, _audioSampleQueue, []);
+      __privateAdd(this, _finalized, false);
+      __privateMethod(this, _validateOptions, validateOptions_fn).call(this, options);
+      options.video = deepClone(options.video);
+      options.audio = deepClone(options.audio);
+      options.fastStart = deepClone(options.fastStart);
+      this.target = options.target;
+      __privateSet(this, _options, {
+        firstTimestampBehavior: "strict",
+        ...options
+      });
+      if (options.target instanceof ArrayBufferTarget) {
+        __privateSet(this, _writer, new ArrayBufferTargetWriter(options.target));
+      } else if (options.target instanceof StreamTarget) {
+        __privateSet(this, _writer, options.target.options?.chunked ? new ChunkedStreamTargetWriter(options.target) : new StreamTargetWriter(options.target));
+      } else if (options.target instanceof FileSystemWritableFileStreamTarget) {
+        __privateSet(this, _writer, new FileSystemWritableFileStreamTargetWriter(options.target));
+      } else {
+        throw new Error(`Invalid target: ${options.target}`);
+      }
+      __privateMethod(this, _prepareTracks, prepareTracks_fn).call(this);
+      __privateMethod(this, _writeHeader, writeHeader_fn).call(this);
+    }
+    addVideoChunk(sample, meta, timestamp, compositionTimeOffset) {
+      if (!(sample instanceof EncodedVideoChunk)) {
+        throw new TypeError("addVideoChunk's first argument (sample) must be of type EncodedVideoChunk.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addVideoChunk's second argument (meta), when provided, must be an object.");
+      }
+      if (timestamp !== void 0 && (!Number.isFinite(timestamp) || timestamp < 0)) {
+        throw new TypeError(
+          "addVideoChunk's third argument (timestamp), when provided, must be a non-negative real number."
+        );
+      }
+      if (compositionTimeOffset !== void 0 && !Number.isFinite(compositionTimeOffset)) {
+        throw new TypeError(
+          "addVideoChunk's fourth argument (compositionTimeOffset), when provided, must be a real number."
+        );
+      }
+      let data = new Uint8Array(sample.byteLength);
+      sample.copyTo(data);
+      this.addVideoChunkRaw(
+        data,
+        sample.type,
+        timestamp ?? sample.timestamp,
+        sample.duration,
+        meta,
+        compositionTimeOffset
+      );
+    }
+    addVideoChunkRaw(data, type, timestamp, duration, meta, compositionTimeOffset) {
+      if (!(data instanceof Uint8Array)) {
+        throw new TypeError("addVideoChunkRaw's first argument (data) must be an instance of Uint8Array.");
+      }
+      if (type !== "key" && type !== "delta") {
+        throw new TypeError("addVideoChunkRaw's second argument (type) must be either 'key' or 'delta'.");
+      }
+      if (!Number.isFinite(timestamp) || timestamp < 0) {
+        throw new TypeError("addVideoChunkRaw's third argument (timestamp) must be a non-negative real number.");
+      }
+      if (!Number.isFinite(duration) || duration < 0) {
+        throw new TypeError("addVideoChunkRaw's fourth argument (duration) must be a non-negative real number.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addVideoChunkRaw's fifth argument (meta), when provided, must be an object.");
+      }
+      if (compositionTimeOffset !== void 0 && !Number.isFinite(compositionTimeOffset)) {
+        throw new TypeError(
+          "addVideoChunkRaw's sixth argument (compositionTimeOffset), when provided, must be a real number."
+        );
+      }
+      __privateMethod(this, _ensureNotFinalized, ensureNotFinalized_fn).call(this);
+      if (!__privateGet(this, _options).video)
+        throw new Error("No video track declared.");
+      if (typeof __privateGet(this, _options).fastStart === "object" && __privateGet(this, _videoTrack).samples.length === __privateGet(this, _options).fastStart.expectedVideoChunks) {
+        throw new Error(`Cannot add more video chunks than specified in 'fastStart' (${__privateGet(this, _options).fastStart.expectedVideoChunks}).`);
+      }
+      let videoSample = __privateMethod(this, _createSampleForTrack, createSampleForTrack_fn).call(this, __privateGet(this, _videoTrack), data, type, timestamp, duration, meta, compositionTimeOffset);
+      if (__privateGet(this, _options).fastStart === "fragmented" && __privateGet(this, _audioTrack)) {
+        while (__privateGet(this, _audioSampleQueue).length > 0 && __privateGet(this, _audioSampleQueue)[0].decodeTimestamp <= videoSample.decodeTimestamp) {
+          let audioSample = __privateGet(this, _audioSampleQueue).shift();
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        }
+        if (videoSample.decodeTimestamp <= __privateGet(this, _audioTrack).lastDecodeTimestamp) {
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        } else {
+          __privateGet(this, _videoSampleQueue).push(videoSample);
+        }
+      } else {
+        __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+      }
+    }
+    addAudioChunk(sample, meta, timestamp) {
+      if (!(sample instanceof EncodedAudioChunk)) {
+        throw new TypeError("addAudioChunk's first argument (sample) must be of type EncodedAudioChunk.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addAudioChunk's second argument (meta), when provided, must be an object.");
+      }
+      if (timestamp !== void 0 && (!Number.isFinite(timestamp) || timestamp < 0)) {
+        throw new TypeError(
+          "addAudioChunk's third argument (timestamp), when provided, must be a non-negative real number."
+        );
+      }
+      let data = new Uint8Array(sample.byteLength);
+      sample.copyTo(data);
+      this.addAudioChunkRaw(data, sample.type, timestamp ?? sample.timestamp, sample.duration, meta);
+    }
+    addAudioChunkRaw(data, type, timestamp, duration, meta) {
+      if (!(data instanceof Uint8Array)) {
+        throw new TypeError("addAudioChunkRaw's first argument (data) must be an instance of Uint8Array.");
+      }
+      if (type !== "key" && type !== "delta") {
+        throw new TypeError("addAudioChunkRaw's second argument (type) must be either 'key' or 'delta'.");
+      }
+      if (!Number.isFinite(timestamp) || timestamp < 0) {
+        throw new TypeError("addAudioChunkRaw's third argument (timestamp) must be a non-negative real number.");
+      }
+      if (!Number.isFinite(duration) || duration < 0) {
+        throw new TypeError("addAudioChunkRaw's fourth argument (duration) must be a non-negative real number.");
+      }
+      if (meta && typeof meta !== "object") {
+        throw new TypeError("addAudioChunkRaw's fifth argument (meta), when provided, must be an object.");
+      }
+      __privateMethod(this, _ensureNotFinalized, ensureNotFinalized_fn).call(this);
+      if (!__privateGet(this, _options).audio)
+        throw new Error("No audio track declared.");
+      if (typeof __privateGet(this, _options).fastStart === "object" && __privateGet(this, _audioTrack).samples.length === __privateGet(this, _options).fastStart.expectedAudioChunks) {
+        throw new Error(`Cannot add more audio chunks than specified in 'fastStart' (${__privateGet(this, _options).fastStart.expectedAudioChunks}).`);
+      }
+      let audioSample = __privateMethod(this, _createSampleForTrack, createSampleForTrack_fn).call(this, __privateGet(this, _audioTrack), data, type, timestamp, duration, meta);
+      if (__privateGet(this, _options).fastStart === "fragmented" && __privateGet(this, _videoTrack)) {
+        while (__privateGet(this, _videoSampleQueue).length > 0 && __privateGet(this, _videoSampleQueue)[0].decodeTimestamp <= audioSample.decodeTimestamp) {
+          let videoSample = __privateGet(this, _videoSampleQueue).shift();
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        }
+        if (audioSample.decodeTimestamp <= __privateGet(this, _videoTrack).lastDecodeTimestamp) {
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        } else {
+          __privateGet(this, _audioSampleQueue).push(audioSample);
+        }
+      } else {
+        __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+      }
+    }
+    /** Finalizes the file, making it ready for use. Must be called after all video and audio chunks have been added. */
+    finalize() {
+      if (__privateGet(this, _finalized)) {
+        throw new Error("Cannot finalize a muxer more than once.");
+      }
+      if (__privateGet(this, _options).fastStart === "fragmented") {
+        for (let videoSample of __privateGet(this, _videoSampleQueue))
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _videoTrack), videoSample);
+        for (let audioSample of __privateGet(this, _audioSampleQueue))
+          __privateMethod(this, _addSampleToTrack, addSampleToTrack_fn).call(this, __privateGet(this, _audioTrack), audioSample);
+        __privateMethod(this, _finalizeFragment, finalizeFragment_fn).call(this, false);
+      } else {
+        if (__privateGet(this, _videoTrack))
+          __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, __privateGet(this, _videoTrack));
+        if (__privateGet(this, _audioTrack))
+          __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, __privateGet(this, _audioTrack));
+      }
+      let tracks = [__privateGet(this, _videoTrack), __privateGet(this, _audioTrack)].filter(Boolean);
+      if (__privateGet(this, _options).fastStart === "in-memory") {
+        let mdatSize;
+        for (let i = 0; i < 2; i++) {
+          let movieBox2 = moov(tracks, __privateGet(this, _creationTime));
+          let movieBoxSize = __privateGet(this, _writer).measureBox(movieBox2);
+          mdatSize = __privateGet(this, _writer).measureBox(__privateGet(this, _mdat));
+          let currentChunkPos = __privateGet(this, _writer).pos + movieBoxSize + mdatSize;
+          for (let chunk of __privateGet(this, _finalizedChunks)) {
+            chunk.offset = currentChunkPos;
+            for (let { data } of chunk.samples) {
+              currentChunkPos += data.byteLength;
+              mdatSize += data.byteLength;
+            }
+          }
+          if (currentChunkPos < 2 ** 32)
+            break;
+          if (mdatSize >= 2 ** 32)
+            __privateGet(this, _mdat).largeSize = true;
+        }
+        let movieBox = moov(tracks, __privateGet(this, _creationTime));
+        __privateGet(this, _writer).writeBox(movieBox);
+        __privateGet(this, _mdat).size = mdatSize;
+        __privateGet(this, _writer).writeBox(__privateGet(this, _mdat));
+        for (let chunk of __privateGet(this, _finalizedChunks)) {
+          for (let sample of chunk.samples) {
+            __privateGet(this, _writer).write(sample.data);
+            sample.data = null;
+          }
+        }
+      } else if (__privateGet(this, _options).fastStart === "fragmented") {
+        let startPos = __privateGet(this, _writer).pos;
+        let mfraBox = mfra(tracks);
+        __privateGet(this, _writer).writeBox(mfraBox);
+        let mfraBoxSize = __privateGet(this, _writer).pos - startPos;
+        __privateGet(this, _writer).seek(__privateGet(this, _writer).pos - 4);
+        __privateGet(this, _writer).writeU32(mfraBoxSize);
+      } else {
+        let mdatPos = __privateGet(this, _writer).offsets.get(__privateGet(this, _mdat));
+        let mdatSize = __privateGet(this, _writer).pos - mdatPos;
+        __privateGet(this, _mdat).size = mdatSize;
+        __privateGet(this, _mdat).largeSize = mdatSize >= 2 ** 32;
+        __privateGet(this, _writer).patchBox(__privateGet(this, _mdat));
+        let movieBox = moov(tracks, __privateGet(this, _creationTime));
+        if (typeof __privateGet(this, _options).fastStart === "object") {
+          __privateGet(this, _writer).seek(__privateGet(this, _ftypSize));
+          __privateGet(this, _writer).writeBox(movieBox);
+          let remainingBytes = mdatPos - __privateGet(this, _writer).pos;
+          __privateGet(this, _writer).writeBox(free(remainingBytes));
+        } else {
+          __privateGet(this, _writer).writeBox(movieBox);
+        }
+      }
+      __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+      __privateGet(this, _writer).finalize();
+      __privateSet(this, _finalized, true);
+    }
+  };
+  _options = new WeakMap();
+  _writer = new WeakMap();
+  _ftypSize = new WeakMap();
+  _mdat = new WeakMap();
+  _videoTrack = new WeakMap();
+  _audioTrack = new WeakMap();
+  _creationTime = new WeakMap();
+  _finalizedChunks = new WeakMap();
+  _nextFragmentNumber = new WeakMap();
+  _videoSampleQueue = new WeakMap();
+  _audioSampleQueue = new WeakMap();
+  _finalized = new WeakMap();
+  _validateOptions = new WeakSet();
+  validateOptions_fn = function(options) {
+    if (typeof options !== "object") {
+      throw new TypeError("The muxer requires an options object to be passed to its constructor.");
+    }
+    if (!(options.target instanceof Target)) {
+      throw new TypeError("The target must be provided and an instance of Target.");
+    }
+    if (options.video) {
+      if (!SUPPORTED_VIDEO_CODECS.includes(options.video.codec)) {
+        throw new TypeError(`Unsupported video codec: ${options.video.codec}`);
+      }
+      if (!Number.isInteger(options.video.width) || options.video.width <= 0) {
+        throw new TypeError(`Invalid video width: ${options.video.width}. Must be a positive integer.`);
+      }
+      if (!Number.isInteger(options.video.height) || options.video.height <= 0) {
+        throw new TypeError(`Invalid video height: ${options.video.height}. Must be a positive integer.`);
+      }
+      const videoRotation = options.video.rotation;
+      if (typeof videoRotation === "number" && ![0, 90, 180, 270].includes(videoRotation)) {
+        throw new TypeError(`Invalid video rotation: ${videoRotation}. Has to be 0, 90, 180 or 270.`);
+      } else if (Array.isArray(videoRotation) && (videoRotation.length !== 9 || videoRotation.some((value) => typeof value !== "number"))) {
+        throw new TypeError(`Invalid video transformation matrix: ${videoRotation.join()}`);
+      }
+      if (options.video.frameRate !== void 0 && (!Number.isInteger(options.video.frameRate) || options.video.frameRate <= 0)) {
+        throw new TypeError(
+          `Invalid video frame rate: ${options.video.frameRate}. Must be a positive integer.`
+        );
+      }
+    }
+    if (options.audio) {
+      if (!SUPPORTED_AUDIO_CODECS.includes(options.audio.codec)) {
+        throw new TypeError(`Unsupported audio codec: ${options.audio.codec}`);
+      }
+      if (!Number.isInteger(options.audio.numberOfChannels) || options.audio.numberOfChannels <= 0) {
+        throw new TypeError(
+          `Invalid number of audio channels: ${options.audio.numberOfChannels}. Must be a positive integer.`
+        );
+      }
+      if (!Number.isInteger(options.audio.sampleRate) || options.audio.sampleRate <= 0) {
+        throw new TypeError(
+          `Invalid audio sample rate: ${options.audio.sampleRate}. Must be a positive integer.`
+        );
+      }
+    }
+    if (options.firstTimestampBehavior && !FIRST_TIMESTAMP_BEHAVIORS.includes(options.firstTimestampBehavior)) {
+      throw new TypeError(`Invalid first timestamp behavior: ${options.firstTimestampBehavior}`);
+    }
+    if (typeof options.fastStart === "object") {
+      if (options.video) {
+        if (options.fastStart.expectedVideoChunks === void 0) {
+          throw new TypeError(`'fastStart' is an object but is missing property 'expectedVideoChunks'.`);
+        } else if (!Number.isInteger(options.fastStart.expectedVideoChunks) || options.fastStart.expectedVideoChunks < 0) {
+          throw new TypeError(`'expectedVideoChunks' must be a non-negative integer.`);
+        }
+      }
+      if (options.audio) {
+        if (options.fastStart.expectedAudioChunks === void 0) {
+          throw new TypeError(`'fastStart' is an object but is missing property 'expectedAudioChunks'.`);
+        } else if (!Number.isInteger(options.fastStart.expectedAudioChunks) || options.fastStart.expectedAudioChunks < 0) {
+          throw new TypeError(`'expectedAudioChunks' must be a non-negative integer.`);
+        }
+      }
+    } else if (![false, "in-memory", "fragmented"].includes(options.fastStart)) {
+      throw new TypeError(`'fastStart' option must be false, 'in-memory', 'fragmented' or an object.`);
+    }
+  };
+  _writeHeader = new WeakSet();
+  writeHeader_fn = function() {
+    __privateGet(this, _writer).writeBox(ftyp({
+      holdsAvc: __privateGet(this, _options).video?.codec === "avc",
+      fragmented: __privateGet(this, _options).fastStart === "fragmented"
+    }));
+    __privateSet(this, _ftypSize, __privateGet(this, _writer).pos);
+    if (__privateGet(this, _options).fastStart === "in-memory") {
+      __privateSet(this, _mdat, mdat(false));
+    } else if (__privateGet(this, _options).fastStart === "fragmented") {
+    } else {
+      if (typeof __privateGet(this, _options).fastStart === "object") {
+        let moovSizeUpperBound = __privateMethod(this, _computeMoovSizeUpperBound, computeMoovSizeUpperBound_fn).call(this);
+        __privateGet(this, _writer).seek(__privateGet(this, _writer).pos + moovSizeUpperBound);
+      }
+      __privateSet(this, _mdat, mdat(true));
+      __privateGet(this, _writer).writeBox(__privateGet(this, _mdat));
+    }
+    __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+  };
+  _computeMoovSizeUpperBound = new WeakSet();
+  computeMoovSizeUpperBound_fn = function() {
+    if (typeof __privateGet(this, _options).fastStart !== "object")
+      return;
+    let upperBound = 0;
+    let sampleCounts = [
+      __privateGet(this, _options).fastStart.expectedVideoChunks,
+      __privateGet(this, _options).fastStart.expectedAudioChunks
+    ];
+    for (let n of sampleCounts) {
+      if (!n)
+        continue;
+      upperBound += (4 + 4) * Math.ceil(2 / 3 * n);
+      upperBound += 4 * n;
+      upperBound += (4 + 4 + 4) * Math.ceil(2 / 3 * n);
+      upperBound += 4 * n;
+      upperBound += 8 * n;
+    }
+    upperBound += 4096;
+    return upperBound;
+  };
+  _prepareTracks = new WeakSet();
+  prepareTracks_fn = function() {
+    if (__privateGet(this, _options).video) {
+      __privateSet(this, _videoTrack, {
+        id: 1,
+        info: {
+          type: "video",
+          codec: __privateGet(this, _options).video.codec,
+          width: __privateGet(this, _options).video.width,
+          height: __privateGet(this, _options).video.height,
+          rotation: __privateGet(this, _options).video.rotation ?? 0,
+          decoderConfig: null
+        },
+        // The fallback contains many common frame rates as factors
+        timescale: __privateGet(this, _options).video.frameRate ?? 57600,
+        samples: [],
+        finalizedChunks: [],
+        currentChunk: null,
+        firstDecodeTimestamp: void 0,
+        lastDecodeTimestamp: -1,
+        timeToSampleTable: [],
+        compositionTimeOffsetTable: [],
+        lastTimescaleUnits: null,
+        lastSample: null,
+        compactlyCodedChunkTable: []
+      });
+    }
+    if (__privateGet(this, _options).audio) {
+      __privateSet(this, _audioTrack, {
+        id: __privateGet(this, _options).video ? 2 : 1,
+        info: {
+          type: "audio",
+          codec: __privateGet(this, _options).audio.codec,
+          numberOfChannels: __privateGet(this, _options).audio.numberOfChannels,
+          sampleRate: __privateGet(this, _options).audio.sampleRate,
+          decoderConfig: null
+        },
+        timescale: __privateGet(this, _options).audio.sampleRate,
+        samples: [],
+        finalizedChunks: [],
+        currentChunk: null,
+        firstDecodeTimestamp: void 0,
+        lastDecodeTimestamp: -1,
+        timeToSampleTable: [],
+        compositionTimeOffsetTable: [],
+        lastTimescaleUnits: null,
+        lastSample: null,
+        compactlyCodedChunkTable: []
+      });
+      if (__privateGet(this, _options).audio.codec === "aac") {
+        let guessedCodecPrivate = __privateMethod(this, _generateMpeg4AudioSpecificConfig, generateMpeg4AudioSpecificConfig_fn).call(
+          this,
+          2,
+          // Object type for AAC-LC, since it's the most common
+          __privateGet(this, _options).audio.sampleRate,
+          __privateGet(this, _options).audio.numberOfChannels
+        );
+        __privateGet(this, _audioTrack).info.decoderConfig = {
+          codec: __privateGet(this, _options).audio.codec,
+          description: guessedCodecPrivate,
+          numberOfChannels: __privateGet(this, _options).audio.numberOfChannels,
+          sampleRate: __privateGet(this, _options).audio.sampleRate
+        };
+      }
+    }
+  };
+  _generateMpeg4AudioSpecificConfig = new WeakSet();
+  generateMpeg4AudioSpecificConfig_fn = function(objectType, sampleRate, numberOfChannels) {
+    let frequencyIndices = [96e3, 88200, 64e3, 48e3, 44100, 32e3, 24e3, 22050, 16e3, 12e3, 11025, 8e3, 7350];
+    let frequencyIndex = frequencyIndices.indexOf(sampleRate);
+    let channelConfig = numberOfChannels;
+    let configBits = "";
+    configBits += objectType.toString(2).padStart(5, "0");
+    configBits += frequencyIndex.toString(2).padStart(4, "0");
+    if (frequencyIndex === 15)
+      configBits += sampleRate.toString(2).padStart(24, "0");
+    configBits += channelConfig.toString(2).padStart(4, "0");
+    let paddingLength = Math.ceil(configBits.length / 8) * 8;
+    configBits = configBits.padEnd(paddingLength, "0");
+    let configBytes = new Uint8Array(configBits.length / 8);
+    for (let i = 0; i < configBits.length; i += 8) {
+      configBytes[i / 8] = parseInt(configBits.slice(i, i + 8), 2);
+    }
+    return configBytes;
+  };
+  _createSampleForTrack = new WeakSet();
+  createSampleForTrack_fn = function(track, data, type, timestamp, duration, meta, compositionTimeOffset) {
+    let presentationTimestampInSeconds = timestamp / 1e6;
+    let decodeTimestampInSeconds = (timestamp - (compositionTimeOffset ?? 0)) / 1e6;
+    let durationInSeconds = duration / 1e6;
+    let adjusted = __privateMethod(this, _validateTimestamp, validateTimestamp_fn).call(this, presentationTimestampInSeconds, decodeTimestampInSeconds, track);
+    presentationTimestampInSeconds = adjusted.presentationTimestamp;
+    decodeTimestampInSeconds = adjusted.decodeTimestamp;
+    if (meta?.decoderConfig) {
+      if (track.info.decoderConfig === null) {
+        track.info.decoderConfig = meta.decoderConfig;
+      } else {
+        Object.assign(track.info.decoderConfig, meta.decoderConfig);
+      }
+    }
+    let sample = {
+      presentationTimestamp: presentationTimestampInSeconds,
+      decodeTimestamp: decodeTimestampInSeconds,
+      duration: durationInSeconds,
+      data,
+      size: data.byteLength,
+      type,
+      // Will be refined once the next sample comes in
+      timescaleUnitsToNextSample: intoTimescale(durationInSeconds, track.timescale)
+    };
+    return sample;
+  };
+  _addSampleToTrack = new WeakSet();
+  addSampleToTrack_fn = function(track, sample) {
+    if (__privateGet(this, _options).fastStart !== "fragmented") {
+      track.samples.push(sample);
+    }
+    const sampleCompositionTimeOffset = intoTimescale(sample.presentationTimestamp - sample.decodeTimestamp, track.timescale);
+    if (track.lastTimescaleUnits !== null) {
+      let timescaleUnits = intoTimescale(sample.decodeTimestamp, track.timescale, false);
+      let delta = Math.round(timescaleUnits - track.lastTimescaleUnits);
+      track.lastTimescaleUnits += delta;
+      track.lastSample.timescaleUnitsToNextSample = delta;
+      if (__privateGet(this, _options).fastStart !== "fragmented") {
+        let lastTableEntry = last(track.timeToSampleTable);
+        if (lastTableEntry.sampleCount === 1) {
+          lastTableEntry.sampleDelta = delta;
+          lastTableEntry.sampleCount++;
+        } else if (lastTableEntry.sampleDelta === delta) {
+          lastTableEntry.sampleCount++;
+        } else {
+          lastTableEntry.sampleCount--;
+          track.timeToSampleTable.push({
+            sampleCount: 2,
+            sampleDelta: delta
+          });
+        }
+        const lastCompositionTimeOffsetTableEntry = last(track.compositionTimeOffsetTable);
+        if (lastCompositionTimeOffsetTableEntry.sampleCompositionTimeOffset === sampleCompositionTimeOffset) {
+          lastCompositionTimeOffsetTableEntry.sampleCount++;
+        } else {
+          track.compositionTimeOffsetTable.push({
+            sampleCount: 1,
+            sampleCompositionTimeOffset
+          });
+        }
+      }
+    } else {
+      track.lastTimescaleUnits = 0;
+      if (__privateGet(this, _options).fastStart !== "fragmented") {
+        track.timeToSampleTable.push({
+          sampleCount: 1,
+          sampleDelta: intoTimescale(sample.duration, track.timescale)
+        });
+        track.compositionTimeOffsetTable.push({
+          sampleCount: 1,
+          sampleCompositionTimeOffset
+        });
+      }
+    }
+    track.lastSample = sample;
+    let beginNewChunk = false;
+    if (!track.currentChunk) {
+      beginNewChunk = true;
+    } else {
+      let currentChunkDuration = sample.presentationTimestamp - track.currentChunk.startTimestamp;
+      if (__privateGet(this, _options).fastStart === "fragmented") {
+        let mostImportantTrack = __privateGet(this, _videoTrack) ?? __privateGet(this, _audioTrack);
+        if (track === mostImportantTrack && sample.type === "key" && currentChunkDuration >= 1) {
+          beginNewChunk = true;
+          __privateMethod(this, _finalizeFragment, finalizeFragment_fn).call(this);
+        }
+      } else {
+        beginNewChunk = currentChunkDuration >= 0.5;
+      }
+    }
+    if (beginNewChunk) {
+      if (track.currentChunk) {
+        __privateMethod(this, _finalizeCurrentChunk, finalizeCurrentChunk_fn).call(this, track);
+      }
+      track.currentChunk = {
+        startTimestamp: sample.presentationTimestamp,
+        samples: []
+      };
+    }
+    track.currentChunk.samples.push(sample);
+  };
+  _validateTimestamp = new WeakSet();
+  validateTimestamp_fn = function(presentationTimestamp, decodeTimestamp, track) {
+    const strictTimestampBehavior = __privateGet(this, _options).firstTimestampBehavior === "strict";
+    const noLastDecodeTimestamp = track.lastDecodeTimestamp === -1;
+    const timestampNonZero = decodeTimestamp !== 0;
+    if (strictTimestampBehavior && noLastDecodeTimestamp && timestampNonZero) {
+      throw new Error(
+        `The first chunk for your media track must have a timestamp of 0 (received DTS=${decodeTimestamp}).Non-zero first timestamps are often caused by directly piping frames or audio data from a MediaStreamTrack into the encoder. Their timestamps are typically relative to the age of thedocument, which is probably what you want.
+
+If you want to offset all timestamps of a track such that the first one is zero, set firstTimestampBehavior: 'offset' in the options.
+`
+      );
+    } else if (__privateGet(this, _options).firstTimestampBehavior === "offset" || __privateGet(this, _options).firstTimestampBehavior === "cross-track-offset") {
+      if (track.firstDecodeTimestamp === void 0) {
+        track.firstDecodeTimestamp = decodeTimestamp;
+      }
+      let baseDecodeTimestamp;
+      if (__privateGet(this, _options).firstTimestampBehavior === "offset") {
+        baseDecodeTimestamp = track.firstDecodeTimestamp;
+      } else {
+        baseDecodeTimestamp = Math.min(
+          __privateGet(this, _videoTrack)?.firstDecodeTimestamp ?? Infinity,
+          __privateGet(this, _audioTrack)?.firstDecodeTimestamp ?? Infinity
+        );
+      }
+      decodeTimestamp -= baseDecodeTimestamp;
+      presentationTimestamp -= baseDecodeTimestamp;
+    }
+    if (decodeTimestamp < track.lastDecodeTimestamp) {
+      throw new Error(
+        `Timestamps must be monotonically increasing (DTS went from ${track.lastDecodeTimestamp * 1e6} to ${decodeTimestamp * 1e6}).`
+      );
+    }
+    track.lastDecodeTimestamp = decodeTimestamp;
+    return { presentationTimestamp, decodeTimestamp };
+  };
+  _finalizeCurrentChunk = new WeakSet();
+  finalizeCurrentChunk_fn = function(track) {
+    if (__privateGet(this, _options).fastStart === "fragmented") {
+      throw new Error("Can't finalize individual chunks if 'fastStart' is set to 'fragmented'.");
+    }
+    if (!track.currentChunk)
+      return;
+    track.finalizedChunks.push(track.currentChunk);
+    __privateGet(this, _finalizedChunks).push(track.currentChunk);
+    if (track.compactlyCodedChunkTable.length === 0 || last(track.compactlyCodedChunkTable).samplesPerChunk !== track.currentChunk.samples.length) {
+      track.compactlyCodedChunkTable.push({
+        firstChunk: track.finalizedChunks.length,
+        // 1-indexed
+        samplesPerChunk: track.currentChunk.samples.length
+      });
+    }
+    if (__privateGet(this, _options).fastStart === "in-memory") {
+      track.currentChunk.offset = 0;
+      return;
+    }
+    track.currentChunk.offset = __privateGet(this, _writer).pos;
+    for (let sample of track.currentChunk.samples) {
+      __privateGet(this, _writer).write(sample.data);
+      sample.data = null;
+    }
+    __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+  };
+  _finalizeFragment = new WeakSet();
+  finalizeFragment_fn = function(flushStreamingWriter = true) {
+    if (__privateGet(this, _options).fastStart !== "fragmented") {
+      throw new Error("Can't finalize a fragment unless 'fastStart' is set to 'fragmented'.");
+    }
+    let tracks = [__privateGet(this, _videoTrack), __privateGet(this, _audioTrack)].filter((track) => track && track.currentChunk);
+    if (tracks.length === 0)
+      return;
+    let fragmentNumber = __privateWrapper(this, _nextFragmentNumber)._++;
+    if (fragmentNumber === 1) {
+      let movieBox = moov(tracks, __privateGet(this, _creationTime), true);
+      __privateGet(this, _writer).writeBox(movieBox);
+    }
+    let moofOffset = __privateGet(this, _writer).pos;
+    let moofBox = moof(fragmentNumber, tracks);
+    __privateGet(this, _writer).writeBox(moofBox);
+    {
+      let mdatBox = mdat(false);
+      let totalTrackSampleSize = 0;
+      for (let track of tracks) {
+        for (let sample of track.currentChunk.samples) {
+          totalTrackSampleSize += sample.size;
+        }
+      }
+      let mdatSize = __privateGet(this, _writer).measureBox(mdatBox) + totalTrackSampleSize;
+      if (mdatSize >= 2 ** 32) {
+        mdatBox.largeSize = true;
+        mdatSize = __privateGet(this, _writer).measureBox(mdatBox) + totalTrackSampleSize;
+      }
+      mdatBox.size = mdatSize;
+      __privateGet(this, _writer).writeBox(mdatBox);
+    }
+    for (let track of tracks) {
+      track.currentChunk.offset = __privateGet(this, _writer).pos;
+      track.currentChunk.moofOffset = moofOffset;
+      for (let sample of track.currentChunk.samples) {
+        __privateGet(this, _writer).write(sample.data);
+        sample.data = null;
+      }
+    }
+    let endPos = __privateGet(this, _writer).pos;
+    __privateGet(this, _writer).seek(__privateGet(this, _writer).offsets.get(moofBox));
+    let newMoofBox = moof(fragmentNumber, tracks);
+    __privateGet(this, _writer).writeBox(newMoofBox);
+    __privateGet(this, _writer).seek(endPos);
+    for (let track of tracks) {
+      track.finalizedChunks.push(track.currentChunk);
+      __privateGet(this, _finalizedChunks).push(track.currentChunk);
+      track.currentChunk = null;
+    }
+    if (flushStreamingWriter) {
+      __privateMethod(this, _maybeFlushStreamingTargetWriter, maybeFlushStreamingTargetWriter_fn).call(this);
+    }
+  };
+  _maybeFlushStreamingTargetWriter = new WeakSet();
+  maybeFlushStreamingTargetWriter_fn = function() {
+    if (__privateGet(this, _writer) instanceof StreamTargetWriter) {
+      __privateGet(this, _writer).flush();
+    }
+  };
+  _ensureNotFinalized = new WeakSet();
+  ensureNotFinalized_fn = function() {
+    if (__privateGet(this, _finalized)) {
+      throw new Error("Cannot add new video or audio chunks after the file has been finalized.");
+    }
+  };
+  return __toCommonJS(src_exports);
+})();
+if (typeof module === "object" && typeof module.exports === "object") Object.assign(module.exports, Mp4Muxer)
+</script>
+<script>
+(function () {
+'use strict';
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const seg01 = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+// CSS-style cubic-bezier easing. The curves are the ones Apple's own interfaces use:
+// a fast start that settles slowly and never bounces.
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = t => ((ax * t + bx) * t + cx) * t, sy = t => ((ay * t + by) * t + cy) * t, dx = t => (3 * ax * t + 2 * bx) * t + cx;
+  return x => {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) { const e = sx(t) - x, d = dx(t); if (Math.abs(e) < 1e-5) return sy(t); if (Math.abs(d) < 1e-6) break; t -= e / d; }
+    let lo = 0, hi = 1; t = x;
+    for (let i = 0; i < 24; i++) { if (sx(t) < x) lo = t; else hi = t; t = (lo + hi) / 2; }
+    return sy(t);
+  };
+}
+const E = {
+  lift: bezier(.32, .72, 0, 1),     // the card's journey
+  out: bezier(.16, 1, .3, 1),       // things arriving
+  glide: bezier(.4, 0, .2, 1),      // a slow, even glide: soft start and soft landing
+  settle: bezier(.3, 0, .08, 1),    // the lock: eases in, then a long, soft, buttery stop (the tail is what makes it feel smooth)
+  inOut: bezier(.65, 0, .35, 1),    // the scan line
+  in: bezier(.7, 0, .84, 0)         // leaving through the screen
+};
+const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; };
+
+/* ------------------------------------------------------- remembered settings */
+const STORE = 'qrscan.settings.v3';
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem(STORE) || '{}') || {}; } catch (e) { saved = {}; }
+function remember(key, val) { saved[key] = val; try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch (e) { /* private window */ } }
+
+/* ------------------------------------------------------------------ state */
+let img = null, srcCv = null, mark = null;
+let view = { s: 1, tx: 0, ty: 0 };
+let scene = null;
+let playing = true, playT0 = 0, playOffset = 0, raf = 0;
+let rendering = false, cancelFlag = false, resultUrl = null;
+
+const stage = $('stage'), markCv = $('markCv'), mctx = markCv.getContext('2d');
+const prevCv = $('prevCv'), pctx = prevCv.getContext('2d');
+const loupe = $('loupe'), lctx = loupe.getContext('2d');
+
+/* ------------------------------------------------------------ the controls */
+function setupSeg(id, def, persist, onPick) {
+  const el = $(id), btns = Array.from(el.querySelectorAll('button'));
+  const want = persist && saved[id] !== undefined && el.querySelector('[data-v="' + saved[id] + '"]') ? saved[id] : def;
+  const apply = v => {
+    el.dataset.value = v;
+    btns.forEach((b, i) => { const on = b.dataset.v === v; b.setAttribute('aria-checked', on ? 'true' : 'false'); if (on) el.style.setProperty('--i', i); });
+  };
+  el.style.setProperty('--n', btns.length);
+  btns.forEach(b => {
+    b.setAttribute('role', 'radio');
+    b.onclick = () => { apply(b.dataset.v); if (persist) remember(id, b.dataset.v); if (onPick) onPick(b.dataset.v); el.dispatchEvent(new Event('change')); };
+  });
+  apply(want);
+  return apply;
+}
+// The size and the quality are not choices: every video is 1080 x 1920 at the best quality (owner, 2026-10-30).
+const OUT_W = 1080, OUT_QUALITY = 0.2;
+setupSeg('fps', '30', true); setupSeg('speed', '1', true); setupSeg('place', 'fit', true); setupSeg('ending', 'flash', true); setupSeg('frame', 'round', true);
+const setTab = setupSeg('tabs', 'prev', false, v => showTab(v));
+function paintRange(el) { el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%'); }
+if (saved.round !== undefined) $('round').value = saved.round;
+$('roundOut').textContent = $('round').value + '%'; paintRange($('round')); paintRange($('scrub'));
+if (saved.autoFit === false) $('autoFit').checked = false;
+const val = id => $(id).dataset.value;
+
+/* --------------------------------------------------------------- load photo */
+async function loadBlob(blob, name) {
+  $('err').textContent = '';
+  try {
+    const bmp = await createImageBitmap(blob);
+    img = bmp;
+    srcCv = mkCanvas(bmp.width, bmp.height);
+    srcCv.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0);
+    mark = null; scene = null;
+    stage.classList.add('has-img');
+    $('fileInfo').textContent = (name ? name + '  -  ' : '') + bmp.width + ' x ' + bmp.height + ' px';
+    $('zoomBtn').disabled = false; $('newBtn').disabled = false; $('fitBtn').disabled = true; $('clearBtn').disabled = true;
+    setHint('Drag a box around the whole QR.');
+    sizeMarkCanvas(); fitView(); drawMark(); refreshPreview();
+  } catch (e) {
+    $('err').textContent = 'That file could not be opened as a photo.';
+  }
+}
+$('pickBtn').onclick = () => $('file').click();
+$('newBtn').onclick = () => $('file').click();
+$('file').onchange = e => { if (e.target.files[0]) loadBlob(e.target.files[0], e.target.files[0].name); e.target.value = ''; };
+window.addEventListener('paste', e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) if (it.type.indexOf('image') === 0) { loadBlob(it.getAsFile(), 'Pasted photo'); e.preventDefault(); return; }
+});
+['dragenter', 'dragover'].forEach(n => window.addEventListener(n, e => { e.preventDefault(); stage.classList.add('dragover'); }));
+['dragleave', 'drop'].forEach(n => window.addEventListener(n, e => { e.preventDefault(); stage.classList.remove('dragover'); }));
+window.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadBlob(f, f.name); });
+
+function setHint(text, tone) { const h = $('markHint'); h.textContent = text; h.className = 'status' + (tone ? ' ' + tone : ''); }
+
+/* ------------------------------------------------------- the marking canvas */
+function sizeMarkCanvas() {
+  const r = stage.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  markCv.width = Math.max(10, Math.round(r.width * dpr));
+  markCv.height = Math.max(10, Math.round(r.height * dpr));
+}
+function fitView() {
+  if (!img) return;
+  const r = stage.getBoundingClientRect(), m = 24;
+  const s = Math.min((r.width - m * 2) / img.width, (r.height - m * 2) / img.height);
+  view = { s, tx: (r.width - img.width * s) / 2, ty: (r.height - img.height * s) / 2 };
+  updateZoomTxt();
+}
+function updateZoomTxt() { $('zoomTxt').textContent = img ? Math.round(view.s * 100) + '%' : ''; }
+window.addEventListener('resize', () => { if (img) { sizeMarkCanvas(); fitView(); drawMark(); } });
+$('zoomBtn').onclick = () => { fitView(); drawMark(); };
+
+const toScreen = (x, y) => [x * view.s + view.tx, y * view.s + view.ty];
+const toImage = (x, y) => [(x - view.tx) / view.s, (y - view.ty) / view.s];
+
+function drawMark() {
+  if (!img) return;
+  const dpr = window.devicePixelRatio || 1, W = markCv.width / dpr, H = markCv.height / dpr;
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mctx.fillStyle = '#060607'; mctx.fillRect(0, 0, W, H);
+  mctx.imageSmoothingEnabled = view.s < 3; mctx.imageSmoothingQuality = 'high';
+  mctx.drawImage(img, view.tx, view.ty, img.width * view.s, img.height * view.s);
+  if (!mark) return;
+  const [x0, y0] = toScreen(mark.x, mark.y), w = mark.w * view.s, h = mark.h * view.s;
+  mctx.fillStyle = 'rgba(6,6,7,.64)';
+  mctx.beginPath(); mctx.rect(0, 0, W, H); mctx.rect(x0, y0, w, h); mctx.fill('evenodd');
+  mctx.strokeStyle = 'rgba(255,255,255,.92)'; mctx.lineWidth = 1; mctx.strokeRect(Math.round(x0) + .5, Math.round(y0) + .5, Math.round(w), Math.round(h));
+  // rounded corner marks, like a crop frame
+  const L = Math.min(22, Math.min(w, h) / 3);
+  mctx.strokeStyle = '#ff8aa5'; mctx.lineWidth = 3; mctx.lineCap = 'round'; mctx.lineJoin = 'round';
+  [[x0, y0, 1, 1], [x0 + w, y0, -1, 1], [x0, y0 + h, 1, -1], [x0 + w, y0 + h, -1, -1]].forEach(c => {
+    mctx.beginPath(); mctx.moveTo(c[0] + c[2] * L, c[1]); mctx.lineTo(c[0], c[1]); mctx.lineTo(c[0], c[1] + c[3] * L); mctx.stroke();
+  });
+  handlePoints().forEach(p => {
+    mctx.save(); mctx.shadowColor = 'rgba(0,0,0,.55)'; mctx.shadowBlur = 4; mctx.shadowOffsetY = 1;
+    mctx.fillStyle = '#fff'; mctx.beginPath(); mctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2); mctx.fill(); mctx.restore();
+  });
+  const tag = Math.round(mark.w) + ' x ' + Math.round(mark.h);
+  mctx.font = '500 11.5px "Instrument Sans", system-ui, sans-serif';
+  const tw = mctx.measureText(tag).width + 14, ty = y0 - 28 < 4 ? y0 + h + 8 : y0 - 28;
+  mctx.fillStyle = 'rgba(20,20,22,.92)'; mctx.beginPath(); mctx.roundRect ? mctx.roundRect(x0, ty, tw, 20, 6) : mctx.rect(x0, ty, tw, 20); mctx.fill();
+  mctx.fillStyle = '#f0efed'; mctx.textBaseline = 'middle'; mctx.fillText(tag, x0 + 7, ty + 10.5);
+}
+function handlePoints() {
+  if (!mark) return [];
+  const [x0, y0] = toScreen(mark.x, mark.y), w = mark.w * view.s, h = mark.h * view.s;
+  const xs = [x0, x0 + w / 2, x0 + w], ys = [y0, y0 + h / 2, y0 + h];
+  const out = [];
+  for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) if (i !== 1 || j !== 1) out.push({ x: xs[i], y: ys[j], i, j });
+  return out;
+}
+const CURSORS = { '0,0': 'nwse-resize', '1,0': 'ns-resize', '2,0': 'nesw-resize', '0,1': 'ew-resize', '2,1': 'ew-resize', '0,2': 'nesw-resize', '1,2': 'ns-resize', '2,2': 'nwse-resize' };
+function hit(px, py) {
+  for (const p of handlePoints()) if (Math.abs(p.x - px) <= 10 && Math.abs(p.y - py) <= 10) return { type: 'handle', i: p.i, j: p.j };
+  if (mark) {
+    const [x0, y0] = toScreen(mark.x, mark.y);
+    if (px >= x0 && px <= x0 + mark.w * view.s && py >= y0 && py <= y0 + mark.h * view.s) return { type: 'move' };
+  }
+  return { type: 'new' };
+}
+
+function showLoupe(ix, iy, px) {
+  const S = 6, R = 11, sx = Math.round(ix) - R, sy = Math.round(iy) - R;
+  loupe.hidden = false;
+  const left = px < stage.clientWidth / 2;
+  loupe.style.left = left ? 'auto' : '14px'; loupe.style.right = left ? '14px' : 'auto';
+  lctx.imageSmoothingEnabled = false;
+  lctx.fillStyle = '#000'; lctx.fillRect(0, 0, 132, 132);
+  lctx.drawImage(srcCv, sx, sy, R * 2, R * 2, 0, 0, 132, 132);
+  if (mark) { lctx.strokeStyle = '#ff8aa5'; lctx.lineWidth = 1; lctx.strokeRect((mark.x - sx) * S + .5, (mark.y - sy) * S + .5, mark.w * S, mark.h * S); }
+  lctx.strokeStyle = 'rgba(255,255,255,.55)'; lctx.beginPath();
+  lctx.moveTo(66, 58); lctx.lineTo(66, 74); lctx.moveTo(58, 66); lctx.lineTo(74, 66); lctx.stroke();
+}
+
+let drag = null, spaceDown = false, altDown = false, tween = 0;
+window.addEventListener('keydown', e => { if (e.code === 'Space' && img && e.target === document.body) { spaceDown = true; e.preventDefault(); } if (e.key === 'Alt') altDown = true; });
+window.addEventListener('keyup', e => { if (e.code === 'Space') spaceDown = false; if (e.key === 'Alt') altDown = false; });
+markCv.addEventListener('contextmenu', e => e.preventDefault());
+markCv.addEventListener('pointerdown', e => {
+  if (!img) return;
+  const r = markCv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  markCv.setPointerCapture(e.pointerId);
+  if (tween) { cancelAnimationFrame(tween); tween = 0; }
+  if (e.button === 1 || e.button === 2 || spaceDown) { drag = { kind: 'pan', px, py, tx: view.tx, ty: view.ty }; markCv.style.cursor = 'grabbing'; return; }
+  const h = hit(px, py);
+  const [ix, iy] = toImage(px, py);
+  if (h.type === 'handle') drag = { kind: 'resize', i: h.i, j: h.j, start: { ...mark } };
+  else if (h.type === 'move') drag = { kind: 'move', ix, iy, start: { ...mark } };
+  else { drag = { kind: 'new', ix, iy }; mark = { x: ix, y: iy, w: 0, h: 0 }; }
+});
+markCv.addEventListener('pointermove', e => {
+  if (!img) return;
+  const r = markCv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  if (!drag) {
+    if (spaceDown) { markCv.style.cursor = 'grab'; return; }
+    const h = hit(px, py);
+    markCv.style.cursor = h.type === 'handle' ? CURSORS[h.i + ',' + h.j] : h.type === 'move' ? 'move' : 'crosshair';
+    return;
+  }
+  const [ix, iy] = toImage(px, py);
+  if (drag.kind === 'pan') { view.tx = drag.tx + (px - drag.px); view.ty = drag.ty + (py - drag.py); }
+  else if (drag.kind === 'new') { mark = { x: Math.min(drag.ix, ix), y: Math.min(drag.iy, iy), w: Math.abs(ix - drag.ix), h: Math.abs(iy - drag.iy) }; }
+  else if (drag.kind === 'move') {
+    mark.x = clamp(drag.start.x + ix - drag.ix, 0, img.width - mark.w);
+    mark.y = clamp(drag.start.y + iy - drag.iy, 0, img.height - mark.h);
+  } else if (drag.kind === 'resize') {
+    let l = drag.start.x, t = drag.start.y, rr = l + drag.start.w, b = t + drag.start.h;
+    if (drag.i === 0) l = ix; if (drag.i === 2) rr = ix;
+    if (drag.j === 0) t = iy; if (drag.j === 2) b = iy;
+    mark = { x: Math.min(l, rr), y: Math.min(t, b), w: Math.abs(rr - l), h: Math.abs(b - t) };
+  }
+  if (mark && drag.kind !== 'pan') {
+    const x0 = clamp(mark.x, 0, img.width), y0 = clamp(mark.y, 0, img.height);
+    mark = { x: x0, y: y0, w: Math.min(mark.w, img.width - x0), h: Math.min(mark.h, img.height - y0) };
+    if (drag.kind === 'new' || drag.kind === 'resize') showLoupe(clamp(ix, 0, img.width), clamp(iy, 0, img.height), px);
+  }
+  drawMark();
+});
+function endDrag() {
+  if (!drag) return;
+  const kind = drag.kind; drag = null; loupe.hidden = true;
+  if (kind === 'pan') return;
+  if (!mark || mark.w < 12 || mark.h < 12) {
+    mark = null; $('fitBtn').disabled = true; $('clearBtn').disabled = true;
+    setHint('Drag a box around the whole QR.'); drawMark(); refreshPreview(); return;
+  }
+  $('fitBtn').disabled = false; $('clearBtn').disabled = false;
+  if ($('autoFit').checked && !altDown) doFit(true);
+  else { setHint($('autoFit').checked ? 'Marked as drawn (Alt was held).' : 'Marked. Auto-fit is off, so the box stays exactly as you drew it.', 'ok'); drawMark(); refreshPreview(); }
+}
+markCv.addEventListener('pointerup', endDrag);
+markCv.addEventListener('pointercancel', endDrag);
+markCv.addEventListener('wheel', e => {
+  if (!img) return; e.preventDefault();
+  const r = markCv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  const [ix, iy] = toImage(px, py);
+  const s = clamp(view.s * Math.exp(-e.deltaY * 0.0015), 0.05, 40);
+  view.s = s; view.tx = px - ix * s; view.ty = py - iy * s;
+  updateZoomTxt(); drawMark();
+}, { passive: false });
+$('clearBtn').onclick = () => { mark = null; $('fitBtn').disabled = true; $('clearBtn').disabled = true; setHint('Drag a box around the whole QR.'); drawMark(); refreshPreview(); };
+$('fitBtn').onclick = () => doFit(false);
+$('autoFit').onchange = () => {
+  remember('autoFit', $('autoFit').checked);
+  if ($('autoFit').checked && mark) doFit(true);
+  else setHint($('autoFit').checked ? 'Auto-fit is on. Hold Alt while drawing to skip it once.' : 'Auto-fit is off. Your box stays exactly as you draw it.');
+};
+
+/* --------------------------------------------- fitting the box to the QR */
+// The area around the box is flooded from its outside edge, stepping only across
+// pixels that look like their neighbour (so soft gradients and shadows pass, a
+// sharp edge stops it). What the flood cannot reach is the QR. Its dots are joined
+// into one piece, and the piece that sits most inside your box gives the new edges.
+function dilate(src, w, h, r) {
+  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h), pre = new Int32Array(Math.max(w, h) + 1);
+  for (let y = 0; y < h; y++) {
+    pre[0] = 0; for (let x = 0; x < w; x++) pre[x + 1] = pre[x] + src[y * w + x];
+    for (let x = 0; x < w; x++) tmp[y * w + x] = pre[Math.min(w, x + r + 1)] - pre[Math.max(0, x - r)] > 0 ? 1 : 0;
+  }
+  for (let x = 0; x < w; x++) {
+    pre[0] = 0; for (let y = 0; y < h; y++) pre[y + 1] = pre[y] + tmp[y * w + x];
+    for (let y = 0; y < h; y++) out[y * w + x] = pre[Math.min(h, y + r + 1)] - pre[Math.max(0, y - r)] > 0 ? 1 : 0;
+  }
+  return out;
+}
+function fitAttempt(m, padK) {
+  const size = Math.max(m.w, m.h), pad = Math.round(size * padK) + 8;
+  const x0 = Math.floor(clamp(m.x - pad, 0, img.width - 1)), y0 = Math.floor(clamp(m.y - pad, 0, img.height - 1));
+  const x1 = Math.ceil(clamp(m.x + m.w + pad, x0 + 1, img.width)), y1 = Math.ceil(clamp(m.y + m.h + pad, y0 + 1, img.height));
+  const w = x1 - x0, h = y1 - y0, ds = Math.max(1, Math.ceil(Math.max(w, h) / 1500));
+  const sw = Math.max(3, Math.round(w / ds)), sh = Math.max(3, Math.round(h / ds)), N = sw * sh;
+  const kx = sw / w, ky = sh / h;
+  let d;
+  if (ds === 1) d = srcCv.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, w, h).data;
+  else { const t = mkCanvas(sw, sh), tx = t.getContext('2d', { willReadFrequently: true }); tx.imageSmoothingQuality = 'medium'; tx.drawImage(srcCv, x0, y0, w, h, 0, 0, sw, sh); d = tx.getImageData(0, 0, sw, sh).data; }
+  const mx0 = (m.x - x0) * kx, my0 = (m.y - y0) * ky, mx1 = (m.x + m.w - x0) * kx, my1 = (m.y + m.h - y0) * ky;
+  const inMark = (x, y) => x >= mx0 && x < mx1 && y >= my0 && y < my1;
+  const bg = new Uint8Array(N), stack = new Int32Array(N); let sp = 0;
+  const seed = i => { if (!bg[i]) { bg[i] = 1; stack[sp++] = i; } };
+  for (let x = 0; x < sw; x++) { if (!inMark(x, 0)) seed(x); if (!inMark(x, sh - 1)) seed((sh - 1) * sw + x); }
+  for (let y = 0; y < sh; y++) { if (!inMark(0, y)) seed(y * sw); if (!inMark(sw - 1, y)) seed(y * sw + sw - 1); }
+  const TOL = 14;
+  const same = (a, b) => { a <<= 2; b <<= 2; return Math.abs(d[a] - d[b]) <= TOL && Math.abs(d[a + 1] - d[b + 1]) <= TOL && Math.abs(d[a + 2] - d[b + 2]) <= TOL; };
+  while (sp) {
+    const p = stack[--sp], px = p % sw, py = (p / sw) | 0;
+    if (px > 0 && !bg[p - 1] && same(p, p - 1)) { bg[p - 1] = 1; stack[sp++] = p - 1; }
+    if (px < sw - 1 && !bg[p + 1] && same(p, p + 1)) { bg[p + 1] = 1; stack[sp++] = p + 1; }
+    if (py > 0 && !bg[p - sw] && same(p, p - sw)) { bg[p - sw] = 1; stack[sp++] = p - sw; }
+    if (py < sh - 1 && !bg[p + sw] && same(p, p + sw)) { bg[p + sw] = 1; stack[sp++] = p + sw; }
+  }
+  const ct = new Uint8Array(N); let any = 0;
+  for (let i = 0; i < N; i++) if (!bg[i]) { ct[i] = 1; any++; }
+  if (!any) return null;
+  const dil = dilate(ct, sw, sh, Math.max(1, Math.round(0.02 * Math.max(sw, sh))));
+  const lab = new Int32Array(N); const comps = [null];
+  for (let s = 0; s < N; s++) {
+    if (!dil[s] || lab[s]) continue;
+    const id = comps.length, c = { over: 0, minx: sw, miny: sh, maxx: -1, maxy: -1 };
+    comps.push(c); lab[s] = id; sp = 0; stack[sp++] = s;
+    while (sp) {
+      const p = stack[--sp], px = p % sw, py = (p / sw) | 0;
+      if (ct[p]) {
+        if (inMark(px, py)) c.over++;
+        if (px < c.minx) c.minx = px; if (px > c.maxx) c.maxx = px; if (py < c.miny) c.miny = py; if (py > c.maxy) c.maxy = py;
+      }
+      if (px > 0 && dil[p - 1] && !lab[p - 1]) { lab[p - 1] = id; stack[sp++] = p - 1; }
+      if (px < sw - 1 && dil[p + 1] && !lab[p + 1]) { lab[p + 1] = id; stack[sp++] = p + 1; }
+      if (py > 0 && dil[p - sw] && !lab[p - sw]) { lab[p - sw] = id; stack[sp++] = p - sw; }
+      if (py < sh - 1 && dil[p + sw] && !lab[p + sw]) { lab[p + sw] = id; stack[sp++] = p + sw; }
+    }
+  }
+  let best = null;
+  for (let i = 1; i < comps.length; i++) if (comps[i].over > 0 && (!best || comps[i].over > best.over)) best = comps[i];
+  if (!best || best.maxx < 0) return null;
+  const tl = best.minx <= 0, tt = best.miny <= 0, tr = best.maxx >= sw - 1, tb = best.maxy >= sh - 1;
+  const L = tl ? m.x : x0 + best.minx / kx, T = tt ? m.y : y0 + best.miny / ky;
+  const R = tr ? m.x + m.w : x0 + (best.maxx + 1) / kx, B = tb ? m.y + m.h : y0 + (best.maxy + 1) / ky;
+  return { rect: { x: Math.max(0, L), y: Math.max(0, T), w: Math.min(img.width, R) - Math.max(0, L), h: Math.min(img.height, B) - Math.max(0, T) }, touches: tl || tt || tr || tb };
+}
+function fitMark(m) {
+  let last = null;
+  for (const k of [0.12, 0.3, 0.6]) {
+    const r = fitAttempt(m, k);
+    if (r) { last = r; if (!r.touches) break; }
+  }
+  if (!last) return null;
+  const a = last.rect, ratio = (a.w * a.h) / (m.w * m.h);
+  if (a.w < 8 || a.h < 8 || ratio < 0.15 || ratio > 4) return null;
+  return a;
+}
+function tweenMark(to, ms) {
+  const from = { ...mark }, t0 = performance.now();
+  cancelAnimationFrame(tween);
+  const step = now => {
+    const u = clamp((now - t0) / ms, 0, 1), e = E.out(u);
+    mark = { x: lerp(from.x, to.x, e), y: lerp(from.y, to.y, e), w: lerp(from.w, to.w, e), h: lerp(from.h, to.h, e) };
+    drawMark();
+    if (u < 1) tween = requestAnimationFrame(step); else { tween = 0; mark = to; drawMark(); refreshPreview(); }
+  };
+  tween = requestAnimationFrame(step);
+}
+function doFit() {
+  if (!mark) return;
+  const r = fitMark(mark);
+  if (!r) {
+    setHint('I could not find clear QR edges here, so the box stays as you drew it. Zoom in and drag the handles to the edges.', 'warn');
+    drawMark(); refreshPreview(); return;
+  }
+  setHint('Fitted to the QR. Drag a handle to change it, or turn off auto-fit.', 'ok');
+  tweenMark(r, 220);
+}
+
+/* ------------------------------------------------------------- the scene */
+function timeline(ending) {
+  // every part is a quick, eased move (fast start, soft landing): the frame arrives br0 to br1
+  const T = { lift0: .4, lift1: 1.35, br0: 1.05, br1: 1.85, scan0: 1.75, scan1: 2.95, lock0: 2.95, lock1: 3.6, lab0: 3.05, lab1: 3.55, out0: 99, out1: 99, end: 4.0 };
+  if (ending === 'flash') { T.out0 = 3.85; T.out1 = 4.15; T.end = 4.45; }
+  if (ending === 'zoom') { T.out0 = 3.8; T.out1 = 4.35; T.end = 4.6; }
+  return T;
+}
+function options() {
+  return {
+    fit: val('place'), radius: +$('round').value / 100, ending: val('ending'), speed: +val('speed'), frame: val('frame'),
+    label: $('labelOn').checked ? $('labelText').value.trim() : ''
+  };
+}
+// a rounded rectangle with smooth ("continuous") corners: the curve eases into the
+// straight edge instead of meeting it at a hard angle, as on Apple's cards and icons
+const SQ_N = 3, SQ_K = 1.2;      // the corner's exponent, and how much larger its radius is drawn
+function squircle(c, x, y, w, h, r) {
+  r = Math.min(r * SQ_K, w / 2, h / 2);
+  if (r < 0.5) { c.beginPath(); c.rect(x, y, w, h); return; }
+  const steps = 16, e = 2 / SQ_N;
+  c.beginPath();
+  const corner = (cx, cy, a0, first) => {
+    for (let i = 0; i <= steps; i++) {
+      const a = a0 + (i / steps) * Math.PI / 2, co = Math.cos(a), si = Math.sin(a);
+      const px = cx + r * Math.sign(co) * Math.pow(Math.abs(co), e), py = cy + r * Math.sign(si) * Math.pow(Math.abs(si), e);
+      if (first && i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+  };
+  corner(x + w - r, y + r, -Math.PI / 2, true);
+  corner(x + w - r, y + h - r, 0, false);
+  corner(x + r, y + h - r, Math.PI / 2, false);
+  corner(x + r, y + r, Math.PI, false);
+  c.closePath();
+}
+function roundRectPath(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+function medianOf(a) { a.sort((p, q) => p - q); return a[a.length >> 1]; }
+function ringColor(m, inner, outer) {
+  const x0 = Math.floor(clamp(m.x - outer, 0, img.width - 1)), y0 = Math.floor(clamp(m.y - outer, 0, img.height - 1));
+  const x1 = Math.ceil(clamp(m.x + m.w + outer, x0 + 2, img.width)), y1 = Math.ceil(clamp(m.y + m.h + outer, y0 + 2, img.height));
+  const w = x1 - x0, h = y1 - y0;
+  const d = srcCv.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, w, h).data;
+  const R = [], G = [], B = [];
+  const ix0 = m.x - inner, iy0 = m.y - inner, ix1 = m.x + m.w + inner, iy1 = m.y + m.h + inner;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const X = x0 + x, Y = y0 + y;
+    if (X >= ix0 && X <= ix1 && Y >= iy0 && Y <= iy1) continue;
+    const o = (y * w + x) * 4; R.push(d[o]); G.push(d[o + 1]); B.push(d[o + 2]);
+  }
+  return R.length ? [medianOf(R), medianOf(G), medianOf(B)] : [128, 128, 128];
+}
+
+function prepare(W, H, o) {
+  const k = W / 1080, iw = img.width, ih = img.height;
+  const base = mkCanvas(W, H), bx = base.getContext('2d');
+  const sc = o.fit === 'fill' ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih);
+  const pw = iw * sc, ph = ih * sc, px = (W - pw) / 2, py = (H - ph) / 2;
+  bx.imageSmoothingQuality = 'high';
+  if (o.fit === 'fit' && (Math.abs(pw - W) > 1 || Math.abs(ph - H) > 1)) {
+    const cs = Math.max(W / iw, H / ih) * 1.2;
+    bx.filter = 'blur(' + (34 * k) + 'px)';
+    bx.drawImage(img, (W - iw * cs) / 2, (H - ih * cs) / 2, iw * cs, ih * cs);
+    bx.filter = 'none';
+    bx.fillStyle = 'rgba(0,0,0,.4)'; bx.fillRect(0, 0, W, H);
+  }
+  bx.drawImage(img, px, py, pw, ph);
+  const q = { x: px + mark.x * sc, y: py + mark.y * sc, w: mark.w * sc, h: mark.h * sc };
+
+  // the tilt of the corners follows the QR card, so the photo never shows a square corner behind it
+  const tsc = Math.min(W * 0.62 / q.w, H * 0.4 / q.h, 3);
+  const tw = Math.round(q.w * tsc), th = Math.round(q.h * tsc), rad = o.radius * Math.min(tw, th), radSrc = rad / tsc;
+
+  // the same photo with the QR taken out: sharp (used as the card lifts off) and soft
+  const rc = ringColor(mark, 3, 9), fillCol = 'rgb(' + rc[0] + ',' + rc[1] + ',' + rc[2] + ')';
+  const hole = mkCanvas(W, H), hx = hole.getContext('2d');
+  hx.drawImage(base, 0, 0); hx.fillStyle = fillCol;
+  squircle(hx, q.x - 1.5 * k, q.y - 1.5 * k, q.w + 3 * k, q.h + 3 * k, radSrc + 1.5 * k); hx.fill();
+  const m = Math.ceil(50 * k), big = mkCanvas(W + 2 * m, H + 2 * m), gx = big.getContext('2d');
+  gx.drawImage(base, 0, 0, W + 2 * m, H + 2 * m); gx.drawImage(base, m, m);
+  gx.fillStyle = fillCol; const e = 5 * k;
+  squircle(gx, q.x + m - e, q.y + m - e, q.w + 2 * e, q.h + 2 * e, radSrc + e); gx.fill();
+  const blurred = mkCanvas(W, H), blx = blurred.getContext('2d');
+  blx.filter = 'blur(' + (18 * k) + 'px) saturate(1.12) brightness(.92)'; blx.drawImage(big, -m, -m);
+  const vig = mkCanvas(W, H), vx = vig.getContext('2d');
+  const vg = vx.createRadialGradient(W / 2, H * 0.44, Math.min(W, H) * 0.25, W / 2, H * 0.44, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.42)'); vx.fillStyle = vg; vx.fillRect(0, 0, W, H);
+
+  // the QR card, made once at its final size
+  const card = mkCanvas(tw, th), cx = card.getContext('2d');
+  cx.imageSmoothingQuality = 'high'; squircle(cx, 0, 0, tw, th, rad); cx.save(); cx.clip();
+  cx.drawImage(srcCv, mark.x, mark.y, mark.w, mark.h, 0, 0, tw, th); cx.restore();
+  cx.strokeStyle = 'rgba(255,255,255,.2)'; cx.lineWidth = 1.5 * k; squircle(cx, .75 * k, .75 * k, tw - 1.5 * k, th - 1.5 * k, rad); cx.stroke();
+  // three shadows, from wide and soft to tight at the edge: how a real card sits above a surface
+  const sm = Math.round(130 * k), shadow = mkCanvas(tw + 2 * sm, th + 2 * sm), sx = shadow.getContext('2d');
+  sx.fillStyle = '#000';
+  [[100, 44, .34], [34, 14, .3], [7, 2, .34]].forEach(s => {
+    sx.shadowColor = 'rgba(0,0,0,' + s[2] + ')'; sx.shadowBlur = s[0] * k; sx.shadowOffsetY = s[1] * k;
+    squircle(sx, sm, sm, tw, th, rad); sx.fill();
+  });
+
+  const T = timeline(o.ending);
+  return { W, H, k, o, T, base, hole, blurred, vig, card, shadow, sm, q, tw, th, rad, target: { cx: W / 2, cy: H * 0.44 }, end: T.end / o.speed };
+}
+
+const WHITE = [255, 255, 255], PINK = [255, 138, 165];
+const mixRGB = (a, b, t) => 'rgb(' + a.map((v, i) => Math.round(lerp(v, b[i], t))).join(',') + ')';
+// Scanner corners that hug the card. "round": the curve runs concentric with the card's
+// own corners (like the iPhone camera's frame). "square": plain sharp corners.
+// The round corner is the card's own corner curve pushed outward by `gap` along its normal,
+// point by point, so the frame stays exactly the same distance from the card all the way round
+// (a plain circular arc does not match a squircle corner).
+function offsetCorner(r, gap, steps) {
+  const e = 2 / SQ_N, pts = [];
+  r = Math.max(r, 0.01);
+  for (let i = 0; i <= steps; i++) {
+    const a = Math.PI + (i / steps) * Math.PI / 2, co = Math.cos(a), si = Math.sin(a);
+    const u = Math.sign(co) * Math.pow(Math.abs(co), e), v = Math.sign(si) * Math.pow(Math.abs(si), e);
+    let nx = Math.sign(u) * Math.pow(Math.abs(u), SQ_N - 1), ny = Math.sign(v) * Math.pow(Math.abs(v), SQ_N - 1);
+    const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+    pts.push([r + r * u + gap * nx, r + r * v + gap * ny]);   // relative to the card's top-left corner
+  }
+  return pts;
+}
+function drawBrackets(c, x, y, w, h, len, gap, rEff, lw, alpha, style) {
+  if (style === 'off') return;
+  const sq = style === 'square';
+  c.save(); c.globalAlpha = alpha; c.strokeStyle = '#fff'; c.lineWidth = lw;
+  c.lineCap = sq ? 'butt' : 'round'; c.lineJoin = sq ? 'miter' : 'round';
+  if (sq) {
+    const x0 = x - gap, y0 = y - gap, x1 = x + w + gap, y1 = y + h + gap;
+    [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]].forEach(p => {
+      c.beginPath(); c.moveTo(p[0] + p[2] * len, p[1]); c.lineTo(p[0], p[1]); c.lineTo(p[0], p[1] + p[3] * len); c.stroke();
+    });
+  } else {
+    const r = Math.min(rEff, w / 2, h / 2), pts = offsetCorner(r, gap, 28);
+    // the same top-left corner, mirrored into the other three, so all four are identical
+    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(m => {
+      const X = px => x + (m[0] > 0 ? px : w - px), Y = py => y + (m[1] > 0 ? py : h - py);
+      c.beginPath(); c.moveTo(X(-gap), Y(r + len));
+      pts.forEach(p => c.lineTo(X(p[0]), Y(p[1])));
+      c.lineTo(X(r + len), Y(-gap)); c.stroke();
+    });
+  }
+  c.restore();
+}
+function drawHeart(c, cx, cy, s, color) {
+  c.save(); c.translate(cx, cy); c.scale(s, s); c.fillStyle = color; c.beginPath();
+  c.moveTo(0, .9); c.bezierCurveTo(-1.5, -.1, -.9, -1.1, 0, -.4); c.bezierCurveTo(.9, -1.1, 1.5, -.1, 0, .9); c.fill(); c.restore();
+}
+
+function drawFrame(c, S, tReal) {
+  const { W, H, k, o, T } = S;
+  const t = tReal * o.speed;                            // time on the normal-speed timeline
+  const liftLin = seg01(t, T.lift0, T.lift1), lift = E.lift(liftLin), soft = E.inOut(liftLin);
+  // the photo drifts closer, then steps back as the card comes forward (depth), then keeps drifting
+  const z = t < T.lift0 ? lerp(1, 1.012, seg01(t, 0, T.lift0)) : lerp(1.012, 0.965, lift) + 0.02 * E.inOut(seg01(t, T.lift1, T.end));
+  const zoomOut = o.ending === 'zoom' ? E.in(seg01(t, T.out0, T.out1)) : 0;
+
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.imageSmoothingQuality = 'low';                      // full-screen layers: cheap filtering (the slow 'high' is for the small card only)
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  c.save();
+  c.translate(W / 2, H / 2); c.scale(z, z); c.translate(-W / 2, -H / 2);
+  if (soft < 1) c.drawImage(liftLin > 0 ? S.hole : S.base, 0, 0);
+  if (liftLin > 0) { c.globalAlpha = soft; c.drawImage(S.blurred, 0, 0); c.globalAlpha = 1; }
+  c.restore();
+  if (liftLin > 0) {
+    c.fillStyle = 'rgba(9,7,12,' + (0.4 * soft) + ')'; c.fillRect(0, 0, W, H);
+    c.globalAlpha = soft; c.drawImage(S.vig, 0, 0); c.globalAlpha = 1;
+  }
+
+  // the QR card
+  const q = S.q;
+  const scx = W / 2 + (q.x + q.w / 2 - W / 2) * z, scy = H / 2 + (q.y + q.h / 2 - H / 2) * z;
+  const cxm = lerp(scx, S.target.cx, lift), cym = lerp(scy, S.target.cy, lift);
+  const f = 1 + 2.4 * zoomOut;
+  const w = lerp(q.w * z, S.tw, lift) * f, h = lerp(q.h * z, S.th, lift) * f;
+  const x = cxm - w / 2, y = cym - h / 2, sf = w / S.tw;
+  if (liftLin > 0) {
+    c.globalAlpha = lift * (1 - zoomOut);
+    c.drawImage(S.shadow, cxm - (S.tw / 2 + S.sm) * sf, cym - (S.th / 2 + S.sm) * sf, (S.tw + 2 * S.sm) * sf, (S.th + 2 * S.sm) * sf);
+    c.globalAlpha = 1;
+  }
+  c.imageSmoothingQuality = 'high';
+  c.drawImage(S.card, x, y, w, h);
+
+  // scanner brackets and the scan line
+  const outFade = 1 - seg01(t, T.out0, T.out0 + .2);
+  const brA = E.glide(seg01(t, T.br0, T.br0 + .55)) * outFade;
+  if (brA > 0) {
+    // they drop in from just outside, land close to the card, then ease in tight when the scan is done
+    // (during the scan they stay loose, 30 out, so the lock that follows is a clear, visible closing-in to 8)
+    // first move (arriving): slow and smooth. Second move (the lock): shorter and snappier, a quick keyframe-style close
+    const gap = t < T.lock0 ? lerp(56 * k, 30 * k, E.glide(seg01(t, T.br0, T.br1))) : lerp(30 * k, 8 * k, E.settle(seg01(t, T.lock0, T.lock1)));
+    // the card's corner is a squircle drawn at 1.2 x its radius: the frame follows that, so the four corners sit the same distance from it
+    drawBrackets(c, x, y, w, h, Math.min(w, h) * 0.13, gap, Math.min(S.rad * SQ_K, S.tw / 2, S.th / 2) * sf, 3.6 * k, brA, o.frame);
+  }
+  if (t > T.scan0 && t < T.scan1 + .02) {
+    // one continuous sine-shaped sweep, top to bottom and back: it slows to a stop at each end and
+    // speeds up through the middle, with no seam where it turns around
+    const u = seg01(t, T.scan0, T.scan1), wave = Math.sin(2 * Math.PI * u);
+    const pos = (1 - Math.cos(2 * Math.PI * u)) / 2, dirDown = wave >= 0;
+    const ly = y + h * pos, band = h * 0.26, fade = Math.min(seg01(u, 0, .1), 1 - seg01(u, .9, 1));
+    const trail = Math.min(1, Math.abs(wave) * 2.2);              // the glow behind the line fades out and in again as it turns
+    c.save();
+    squircle(c, x, y, w, h, S.rad * sf); c.clip();
+    const y0 = dirDown ? ly - band : ly, y1 = dirDown ? ly : ly + band;
+    const g = c.createLinearGradient(0, dirDown ? y0 : y1, 0, dirDown ? y1 : y0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.6, 'rgba(255,255,255,.1)'); g.addColorStop(1, 'rgba(255,255,255,.3)');
+    c.globalAlpha = fade * trail; c.fillStyle = g; c.fillRect(x, y0, w, y1 - y0);
+    const lg = c.createLinearGradient(x, 0, x + w, 0);          // the line itself tapers to nothing at both ends
+    lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(.14, 'rgba(255,255,255,.95)'); lg.addColorStop(.86, 'rgba(255,255,255,.95)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+    c.globalAlpha = fade; c.fillStyle = lg; c.fillRect(x, ly - 1.25 * k, w, 2.5 * k);
+    c.restore();
+  }
+
+  // optional label
+  if (o.label) {
+    const la = E.out(seg01(t, T.lab0, T.lab1)) * outFade;
+    if (la > 0) {
+      c.save(); c.globalAlpha = la;
+      const fs = 28 * k; c.font = '600 ' + fs + 'px "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+      const tw = c.measureText(o.label).width, padX = 26 * k, hh = 62 * k, hs = 10 * k;
+      const pw = tw + padX * 2 + hs * 2 + 12 * k, py = y + h + 46 * k + (1 - la) * 12 * k;
+      roundRectPath(c, W / 2 - pw / 2, py, pw, hh, hh / 2);
+      c.fillStyle = 'rgba(22,20,26,.8)'; c.fill(); c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1.5 * k; c.stroke();
+      drawHeart(c, W / 2 - pw / 2 + padX + hs, py + hh / 2, hs, '#ff7a9a');
+      c.fillStyle = '#fff'; c.textBaseline = 'middle'; c.textAlign = 'left';
+      c.fillText(o.label, W / 2 - pw / 2 + padX + hs * 2 + 12 * k, py + hh / 2 + 1 * k);
+      c.restore();
+    }
+  }
+
+  // the ending
+  if (o.ending === 'flash') {
+    const fa = E.in(seg01(t, T.out0, T.out1));
+    if (fa > 0) { c.fillStyle = 'rgba(255,255,255,' + fa + ')'; c.fillRect(0, 0, W, H); }
+  } else if (o.ending === 'zoom') {
+    const fa = E.in(seg01(t, T.out0 + .25, T.out1));
+    if (fa > 0) { c.fillStyle = 'rgba(255,255,255,' + fa + ')'; c.fillRect(0, 0, W, H); }
+  }
+}
+
+/* ---------------------------------------------------------------- preview */
+let rebuildTimer = 0;
+function refreshPreview() {
+  clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(() => {
+    cancelAnimationFrame(raf);
+    const ready = !!(img && mark);
+    $('prevWrap').classList.toggle('ready', ready);
+    $('playBtn').disabled = !ready; $('scrub').disabled = !ready; $('startBtn').disabled = !ready || rendering;
+    if (!ready) { scene = null; $('phases').innerHTML = ''; return; }
+    scene = prepare(540, 960, options());
+    drawPhases();
+    playOffset = 0; playT0 = performance.now(); playing = true; $('playBtn').textContent = 'Pause';
+    raf = requestAnimationFrame(tick);
+  }, 90);
+}
+function drawPhases() {
+  const T = scene.T, host = $('phases'); host.innerHTML = '';
+  const marks = [['Lift', T.lift0], ['Scan', T.scan0], ['Lock', T.lock0]];
+  if (scene.o.ending !== 'cut') marks.push([scene.o.ending === 'zoom' ? 'Zoom' : 'Flash', T.out0]);
+  marks.forEach(m => { const s = document.createElement('span'); s.textContent = m[0]; s.style.left = (m[1] / T.end * 100) + '%'; host.appendChild(s); });
+}
+function tick(ts) {
+  if (!scene) return;
+  if (playing) {
+    const dur = scene.end + 0.5, el = ((ts - playT0) / 1000 + playOffset) % dur, tt = Math.min(el, scene.end);
+    drawFrame(pctx, scene, tt);
+    $('scrub').value = Math.round(tt / scene.end * 1000); paintRange($('scrub'));
+  }
+  raf = requestAnimationFrame(tick);
+}
+$('playBtn').onclick = () => {
+  if (!scene) return;
+  if (playing) { playing = false; $('playBtn').textContent = 'Play'; }
+  else { playOffset = $('scrub').value / 1000 * scene.end; playT0 = performance.now(); playing = true; $('playBtn').textContent = 'Pause'; }
+};
+$('scrub').oninput = () => {
+  if (!scene) return;
+  playing = false; $('playBtn').textContent = 'Play'; paintRange($('scrub'));
+  drawFrame(pctx, scene, $('scrub').value / 1000 * scene.end);
+};
+['place', 'ending', 'speed', 'frame'].forEach(id => $(id).addEventListener('change', refreshPreview));
+$('round').addEventListener('input', () => { $('roundOut').textContent = $('round').value + '%'; paintRange($('round')); remember('round', +$('round').value); refreshPreview(); });
+$('labelOn').addEventListener('change', () => { $('labelRow').hidden = !$('labelOn').checked; refreshPreview(); });
+$('labelText').addEventListener('input', refreshPreview);
+
+function showTab(which) {
+  const vid = which === 'vid';
+  $('viewPrev').hidden = vid; $('viewVid').hidden = !vid;
+  if (!vid) $('vid').pause(); else $('vid').play().catch(() => {});
+}
+
+/* ----------------------------------------------------------------- render */
+const CODECS = ['avc1.64002A', 'avc1.4D002A', 'avc1.42002A'];
+async function pickConfig(W, H, fps, bitrate) {
+  for (const hw of ['prefer-hardware', 'no-preference']) for (const codec of CODECS) {
+    const cfg = { codec, width: W, height: H, bitrate, framerate: fps, hardwareAcceleration: hw, bitrateMode: 'variable', avc: { format: 'avc' } };
+    try { const r = await VideoEncoder.isConfigSupported(cfg); if (r.supported) return r.config; } catch (e) { /* try the next one */ }
+  }
+  return null;
+}
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
+// sleeps until the encoder has finished a frame (a tight loop here starves the encoder's own callbacks)
+const nextDequeue = enc => new Promise(r => {
+  let done = false;
+  const fin = () => { if (!done) { done = true; enc.removeEventListener('dequeue', fin); r(); } };
+  enc.addEventListener('dequeue', fin); setTimeout(fin, 40);
+});
+
+async function render() {
+  if (!img || !mark || rendering) return;
+  $('err').textContent = '';
+  if (typeof VideoEncoder === 'undefined') { $('err').textContent = 'This browser cannot make videos here. Open the page in Chrome or Edge.'; return; }
+  rendering = true; cancelFlag = false;
+  $('startBtn').disabled = true; $('cancelBtn').hidden = false; $('prog').hidden = false;
+  playing = false; $('playBtn').textContent = 'Play';
+  const fps = +val('fps'), W = OUT_W, H = Math.round(W * 16 / 9);
+  const bitrate = Math.round(W * H * fps * OUT_QUALITY);
+  let encoder = null;
+  try {
+    const cfg = await pickConfig(W, H, fps, bitrate);
+    if (!cfg) throw new Error('This computer cannot encode ' + W + 'x' + H + ' video.');
+    const S = prepare(W, H, options());
+    const n = Math.max(2, Math.round(S.end * fps));
+    const target = new Mp4Muxer.ArrayBufferTarget();
+    const muxer = new Mp4Muxer.Muxer({ target, video: { codec: 'avc', width: W, height: H, frameRate: fps }, fastStart: 'in-memory' });
+    let encError = null;
+    encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { encError = e; } });
+    encoder.configure(cfg);
+    const cv = new OffscreenCanvas(W, H), c = cv.getContext('2d', { alpha: false });
+    const t0 = performance.now(), keyEvery = fps * 2, us = 1e6 / fps;
+    const st = { draw: 0, frame: 0, wait: 0 };
+    for (let i = 0; i < n; i++) {
+      if (cancelFlag) throw new Error('cancelled');
+      if (encError) throw encError;
+      const a0 = performance.now();
+      drawFrame(c, S, Math.min(i / fps, S.end));
+      const a1 = performance.now(); st.draw += a1 - a0;
+      const frame = new VideoFrame(cv, { timestamp: Math.round(i * us), duration: Math.round(us) });
+      encoder.encode(frame, { keyFrame: i % keyEvery === 0 });
+      frame.close();
+      const a2 = performance.now(); st.frame += a2 - a1;
+      while (encoder.encodeQueueSize > 6) await nextDequeue(encoder);
+      st.wait += performance.now() - a2;
+      if (i % 8 === 7 || i === n - 1) {
+        const done = (i + 1) / n, el = (performance.now() - t0) / 1000;
+        $('barFill').style.width = (done * 100).toFixed(1) + '%';
+        $('progTxt').textContent = 'Frame ' + (i + 1) + ' of ' + n + '  -  about ' + Math.max(0, Math.ceil(el / done - el)) + ' s left';
+        await yieldUI();
+      }
+    }
+    await encoder.flush(); encoder.close(); encoder = null;
+    muxer.finalize();
+    const blob = new Blob([target.buffer], { type: 'video/mp4' });
+    if (resultUrl) URL.revokeObjectURL(resultUrl);
+    resultUrl = URL.createObjectURL(blob);
+    $('vid').src = resultUrl; $('dl').href = resultUrl; $('dl').download = 'qr-scan-' + fps + 'fps.mp4';
+    $('meta').textContent = W + 'x' + H + '  -  ' + fps + ' fps  -  ' + (blob.size / 1048576).toFixed(1) + ' MB  -  made in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s';
+    window.__qr.stats = { draw: Math.round(st.draw), frame: Math.round(st.frame), wait: Math.round(st.wait), frames: n, hw: cfg.hardwareAcceleration };
+    $('tabs').querySelector('[data-v="vid"]').disabled = false; setTab('vid'); showTab('vid');
+  } catch (e) {
+    if (e && e.message !== 'cancelled') $('err').textContent = 'The video could not be made: ' + (e.message || e);
+    try { if (encoder && encoder.state !== 'closed') encoder.close(); } catch (x) { /* ignore */ }
+  }
+  rendering = false; $('prog').hidden = true; $('cancelBtn').hidden = true; $('startBtn').disabled = !(img && mark);
+  playT0 = performance.now(); playOffset = 0; playing = true; $('playBtn').textContent = 'Pause';
+}
+$('startBtn').onclick = render;
+$('cancelBtn').onclick = () => { cancelFlag = true; };
+
+if (typeof VideoEncoder === 'undefined') $('err').textContent = 'This browser cannot make videos. Open the page in Chrome or Edge.';
+window.__qr = {
+  loadBlob, render,
+  setMark: m => { mark = m; $('fitBtn').disabled = false; $('clearBtn').disabled = false; drawMark(); refreshPreview(); },
+  fit: m => fitMark(m || mark), getMark: () => mark
+};
+})();
+</script>
+</body>
+</html>
