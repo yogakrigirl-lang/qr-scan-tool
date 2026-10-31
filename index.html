@@ -2800,10 +2800,39 @@ const nextDequeue = enc => new Promise(r => {
   enc.addEventListener('dequeue', fin); setTimeout(fin, 40);
 });
 
+// For browsers without WebCodecs (older Safari, Firefox) or computers whose encoder will not start:
+// records the canvas live with MediaRecorder instead. Takes as long as the clip, and the tab must stay visible.
+async function recordVideo(S, W, H, fps) {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('This browser cannot make videos. Use a recent Chrome, Edge, Firefox or Safari.');
+  const type = ['video/mp4;codecs=avc1.640028', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d', { alpha: false });
+  drawFrame(c, S, 0);
+  const rec = new MediaRecorder(cv.captureStream(fps), type ? { mimeType: type, videoBitsPerSecond: Math.round(W * H * fps * OUT_QUALITY) } : {});
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((res, no) => { rec.onstop = res; rec.onerror = e => no((e && e.error) || new Error('The recorder failed.')); });
+  rec.start(250);
+  const t0 = performance.now();
+  for (;;) {
+    const t = (performance.now() - t0) / 1000;
+    if (cancelFlag) { try { rec.stop(); } catch (x) { /* ignore */ } throw new Error('cancelled'); }
+    drawFrame(c, S, Math.min(t, S.end));
+    $('barFill').style.width = (Math.min(1, t / S.end) * 100).toFixed(1) + '%';
+    $('progTxt').textContent = 'Recording  -  about ' + Math.max(0, Math.ceil(S.end - t)) + ' s left (keep this tab open)';
+    if (t >= S.end) break;
+    await new Promise(r => { const id = setTimeout(r, 60); requestAnimationFrame(() => { clearTimeout(id); r(); }); });
+  }
+  await new Promise(r => setTimeout(r, 150));
+  rec.stop(); await stopped;
+  const mime = rec.mimeType || type || 'video/webm';
+  return { blob: new Blob(chunks, { type: mime }), ext: mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm' };
+}
+
 async function render() {
   if (!img || !mark || rendering) return;
   $('err').textContent = '';
-  if (typeof VideoEncoder === 'undefined') { $('err').textContent = 'This browser cannot make videos here. Open the page in Chrome or Edge.'; return; }
+  if (typeof VideoEncoder === 'undefined' && !window.MediaRecorder) { $('err').textContent = 'This browser cannot make videos. Use a recent Chrome, Edge, Firefox or Safari.'; return; }
   rendering = true; cancelFlag = false;
   $('startBtn').disabled = true; $('cancelBtn').hidden = false; $('prog').hidden = false;
   playing = false; $('playBtn').textContent = 'Play';
@@ -2811,46 +2840,63 @@ async function render() {
   let encoder = null;
   try {
     $('progTxt').textContent = 'Getting the video encoder ready...';
-    const pick = await pickConfig(fps);
-    if (!pick) throw new Error('This browser cannot start a video encoder. Update Chrome or Edge, then try again.');
-    const cfg = pick.cfg, W = cfg.width, H = cfg.height;
-    const S = prepare(W, H, options());
-    const n = Math.max(2, Math.round(S.end * fps));
-    const target = new Mp4Muxer.ArrayBufferTarget();
-    const muxer = new Mp4Muxer.Muxer({ target, video: { codec: pick.muxCodec, width: W, height: H, frameRate: fps }, fastStart: 'in-memory' });
-    let encError = null;
-    encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { encError = e; } });
-    encoder.configure(cfg);
-    const cv = new OffscreenCanvas(W, H), c = cv.getContext('2d', { alpha: false });
-    const t0 = performance.now(), keyEvery = fps * 2, us = 1e6 / fps;
+    let blob = null, ext = 'mp4', W = OUT_W, H = Math.round(OUT_W * 16 / 9), n = 0, how = 'recorder';
     const st = { draw: 0, frame: 0, wait: 0 };
-    for (let i = 0; i < n; i++) {
-      if (cancelFlag) throw new Error('cancelled');
-      if (encError) throw encError;
-      const a0 = performance.now();
-      drawFrame(c, S, Math.min(i / fps, S.end));
-      const a1 = performance.now(); st.draw += a1 - a0;
-      const frame = new VideoFrame(cv, { timestamp: Math.round(i * us), duration: Math.round(us) });
-      encoder.encode(frame, { keyFrame: i % keyEvery === 0 });
-      frame.close();
-      const a2 = performance.now(); st.frame += a2 - a1;
-      while (encoder.encodeQueueSize > 6) await nextDequeue(encoder);
-      st.wait += performance.now() - a2;
-      if (i % 8 === 7 || i === n - 1) {
-        const done = (i + 1) / n, el = (performance.now() - t0) / 1000;
-        $('barFill').style.width = (done * 100).toFixed(1) + '%';
-        $('progTxt').textContent = 'Frame ' + (i + 1) + ' of ' + n + '  -  about ' + Math.max(0, Math.ceil(el / done - el)) + ' s left';
-        await yieldUI();
+    const t0 = performance.now();
+    const pick = typeof VideoEncoder !== 'undefined' ? await pickConfig(fps) : null;
+    if (pick) {
+      try {
+        const cfg = pick.cfg; W = cfg.width; H = cfg.height; how = cfg.hardwareAcceleration;
+        const S = prepare(W, H, options());
+        n = Math.max(2, Math.round(S.end * fps));
+        const target = new Mp4Muxer.ArrayBufferTarget();
+        const muxer = new Mp4Muxer.Muxer({ target, video: { codec: pick.muxCodec, width: W, height: H, frameRate: fps }, fastStart: 'in-memory' });
+        let encError = null;
+        encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { encError = e; } });
+        encoder.configure(cfg);
+        const cv = new OffscreenCanvas(W, H), c = cv.getContext('2d', { alpha: false });
+        const keyEvery = fps * 2, us = 1e6 / fps;
+        for (let i = 0; i < n; i++) {
+          if (cancelFlag) throw new Error('cancelled');
+          if (encError) throw encError;
+          const a0 = performance.now();
+          drawFrame(c, S, Math.min(i / fps, S.end));
+          const a1 = performance.now(); st.draw += a1 - a0;
+          const frame = new VideoFrame(cv, { timestamp: Math.round(i * us), duration: Math.round(us) });
+          encoder.encode(frame, { keyFrame: i % keyEvery === 0 });
+          frame.close();
+          const a2 = performance.now(); st.frame += a2 - a1;
+          while (encoder.encodeQueueSize > 6) await nextDequeue(encoder);
+          st.wait += performance.now() - a2;
+          if (i % 8 === 7 || i === n - 1) {
+            const done = (i + 1) / n, el = (performance.now() - t0) / 1000;
+            $('barFill').style.width = (done * 100).toFixed(1) + '%';
+            $('progTxt').textContent = 'Frame ' + (i + 1) + ' of ' + n + '  -  about ' + Math.max(0, Math.ceil(el / done - el)) + ' s left';
+            await yieldUI();
+          }
+        }
+        if (encError) throw encError;
+        await encoder.flush(); encoder.close(); encoder = null;
+        muxer.finalize();
+        blob = new Blob([target.buffer], { type: 'video/mp4' });
+      } catch (e) {
+        if (e && e.message === 'cancelled') throw e;
+        // the encoder broke part-way: fall through to the live recorder
+        try { if (encoder && encoder.state !== 'closed') encoder.close(); } catch (x) { /* ignore */ }
+        encoder = null; blob = null; how = 'recorder';
       }
     }
-    await encoder.flush(); encoder.close(); encoder = null;
-    muxer.finalize();
-    const blob = new Blob([target.buffer], { type: 'video/mp4' });
+    if (!blob) {
+      W = OUT_W; H = Math.round(W * 16 / 9);
+      const S = prepare(W, H, options());
+      n = Math.round(S.end * fps);
+      ({ blob, ext } = await recordVideo(S, W, H, fps));
+    }
     if (resultUrl) URL.revokeObjectURL(resultUrl);
     resultUrl = URL.createObjectURL(blob);
-    $('vid').src = resultUrl; $('dl').href = resultUrl; $('dl').download = 'qr-scan-' + fps + 'fps.mp4';
+    $('vid').src = resultUrl; $('dl').href = resultUrl; $('dl').download = 'qr-scan-' + fps + 'fps.' + ext;
     $('meta').textContent = W + 'x' + H + '  -  ' + fps + ' fps  -  ' + (blob.size / 1048576).toFixed(1) + ' MB  -  made in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s';
-    window.__qr.stats = { draw: Math.round(st.draw), frame: Math.round(st.frame), wait: Math.round(st.wait), frames: n, hw: cfg.hardwareAcceleration };
+    window.__qr.stats = { draw: Math.round(st.draw), frame: Math.round(st.frame), wait: Math.round(st.wait), frames: n, hw: how };
     $('tabs').querySelector('[data-v="vid"]').disabled = false; setTab('vid'); showTab('vid');
   } catch (e) {
     if (e && e.message !== 'cancelled') $('err').textContent = 'The video could not be made: ' + (e.message || e);
@@ -2862,7 +2908,7 @@ async function render() {
 $('startBtn').onclick = render;
 $('cancelBtn').onclick = () => { cancelFlag = true; };
 
-if (typeof VideoEncoder === 'undefined') $('err').textContent = 'This browser cannot make videos. Open the page in Chrome or Edge.';
+if (typeof VideoEncoder === 'undefined' && !window.MediaRecorder) $('err').textContent = 'This browser cannot make videos. Use a recent Chrome, Edge, Firefox or Safari.';
 window.__qr = {
   loadBlob, render,
   setMark: m => { mark = m; $('fitBtn').disabled = false; $('clearBtn').disabled = false; drawMark(); refreshPreview(); },
