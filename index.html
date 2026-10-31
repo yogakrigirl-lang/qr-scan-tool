@@ -2758,11 +2758,37 @@ function showTab(which) {
 }
 
 /* ----------------------------------------------------------------- render */
-const CODECS = ['avc1.64002A', 'avc1.4D002A', 'avc1.42002A'];
-async function pickConfig(W, H, fps, bitrate) {
-  for (const hw of ['prefer-hardware', 'no-preference']) for (const codec of CODECS) {
-    const cfg = { codec, width: W, height: H, bitrate, framerate: fps, hardwareAcceleration: hw, bitrateMode: 'variable', avc: { format: 'avc' } };
-    try { const r = await VideoEncoder.isConfigSupported(cfg); if (r.supported) return r.config; } catch (e) { /* try the next one */ }
+const H264 = ['avc1.64002A', 'avc1.4D002A', 'avc1.42002A', 'avc1.640028', 'avc1.4D0028', 'avc1.420028'];
+// isConfigSupported can say yes and the encoder still fail when it really starts ("Encoder initialization error"),
+// so a setup is only used after it has encoded one real frame
+async function worksForReal(cfg) {
+  let enc = null, failed = false;
+  try {
+    enc = new VideoEncoder({ output: () => {}, error: () => { failed = true; } });
+    enc.configure(cfg);
+    const cv = new OffscreenCanvas(cfg.width, cfg.height);
+    cv.getContext('2d').fillRect(0, 0, 8, 8);
+    const f = new VideoFrame(cv, { timestamp: 0 });
+    enc.encode(f, { keyFrame: true }); f.close();
+    await Promise.race([enc.flush(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 5000))]);
+    return !failed;
+  } catch (e) { return false; }
+  finally { try { if (enc && enc.state !== 'closed') enc.close(); } catch (x) { /* ignore */ } }
+}
+// best setup first: full size on the video chip, then in software, then looser settings, then a smaller size, then VP9
+async function pickConfig(fps) {
+  const sizes = [[OUT_W, 'avc'], [720, 'avc'], [OUT_W, 'vp9']];
+  for (const [W, muxCodec] of sizes) {
+    const H = Math.round(W * 16 / 9), bitrate = Math.round(W * H * fps * OUT_QUALITY);
+    const codecs = muxCodec === 'avc' ? H264 : ['vp09.00.41.08', 'vp09.00.40.08'];
+    for (const hw of ['prefer-hardware', 'no-preference', 'prefer-software']) for (const codec of codecs) for (const loose of [false, true]) {
+      const cfg = { codec, width: W, height: H, bitrate, framerate: fps, hardwareAcceleration: hw };
+      if (muxCodec === 'avc' && !loose) { cfg.bitrateMode = 'variable'; cfg.avc = { format: 'avc' }; }
+      try {
+        const r = await VideoEncoder.isConfigSupported(cfg);
+        if (r.supported && await worksForReal(r.config)) return { cfg: r.config, muxCodec };
+      } catch (e) { /* try the next one */ }
+    }
   }
   return null;
 }
@@ -2781,16 +2807,17 @@ async function render() {
   rendering = true; cancelFlag = false;
   $('startBtn').disabled = true; $('cancelBtn').hidden = false; $('prog').hidden = false;
   playing = false; $('playBtn').textContent = 'Play';
-  const fps = +val('fps'), W = OUT_W, H = Math.round(W * 16 / 9);
-  const bitrate = Math.round(W * H * fps * OUT_QUALITY);
+  const fps = +val('fps');
   let encoder = null;
   try {
-    const cfg = await pickConfig(W, H, fps, bitrate);
-    if (!cfg) throw new Error('This computer cannot encode ' + W + 'x' + H + ' video.');
+    $('progTxt').textContent = 'Getting the video encoder ready...';
+    const pick = await pickConfig(fps);
+    if (!pick) throw new Error('This browser cannot start a video encoder. Update Chrome or Edge, then try again.');
+    const cfg = pick.cfg, W = cfg.width, H = cfg.height;
     const S = prepare(W, H, options());
     const n = Math.max(2, Math.round(S.end * fps));
     const target = new Mp4Muxer.ArrayBufferTarget();
-    const muxer = new Mp4Muxer.Muxer({ target, video: { codec: 'avc', width: W, height: H, frameRate: fps }, fastStart: 'in-memory' });
+    const muxer = new Mp4Muxer.Muxer({ target, video: { codec: pick.muxCodec, width: W, height: H, frameRate: fps }, fastStart: 'in-memory' });
     let encError = null;
     encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { encError = e; } });
     encoder.configure(cfg);
